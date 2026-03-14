@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Accedi — 4D Sistemi</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-text">4D Sistemi Informatici</div>
+      <div class="login-logo-sub">Matrice dei Servizi — Area collaboratori</div>
+    </div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab-btn active" onclick="switchTab('login')">Accedi</button>
+      <button class="auth-tab-btn" onclick="switchTab('register')">Registrati</button>
+    </div>
+
+    <div id="alert" class="alert hidden"></div>
+
+    <div id="tab-login">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="nome@4dsistemi.it">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-top:4px" onclick="login()">Accedi</button>
+    </div>
+
+    <div id="tab-register" class="hidden">
+      <div class="form-group">
+        <label>Nome completo</label>
+        <input type="text" id="reg-name" placeholder="Mario Rossi">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="reg-email" placeholder="nome@4dsistemi.it">
+      </div>
+      <div class="form-group">
+        <label>Password <span style="color:var(--muted);font-weight:400">(min. 8 caratteri)</span></label>
+        <input type="password" id="reg-password" placeholder="••••••••">
+      </div>
+      <div class="form-group">
+        <label>Conferma password</label>
+        <input type="password" id="reg-password2" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-top:4px" onclick="register()">Crea account</button>
+      <p style="font-size:11px;color:var(--muted);margin-top:10px;text-align:center;line-height:1.6">
+        Il tuo account sarà attivo subito come <strong>Contributor</strong>.<br>
+        Un Admin può promuoverti se necessario.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
+sb.auth.getSession().then(({ data: { session } }) => {
+  if (session) window.location.href = 'matrix.html'
+})
+
+function switchTab(t) {
+  document.getElementById('tab-login').classList.toggle('hidden', t !== 'login')
+  document.getElementById('tab-register').classList.toggle('hidden', t !== 'register')
+  document.querySelectorAll('.auth-tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', (i===0&&t==='login')||(i===1&&t==='register'))
+  })
+  hideAlert()
+}
+
+function showAlert(msg, type='error') {
+  const el = document.getElementById('alert')
+  el.className = 'alert alert-' + type
+  el.textContent = msg
+}
+function hideAlert() { document.getElementById('alert').className = 'alert hidden' }
+
+async function login() {
+  const email    = document.getElementById('login-email').value.trim()
+  const password = document.getElementById('login-password').value
+  if (!email || !password) return showAlert('Inserisci email e password.')
+  const { error } = await sb.auth.signInWithPassword({ email, password })
+  if (error) return showAlert('Credenziali non valide. Riprova.')
+  window.location.href = 'matrix.html'
+}
+
+async function register() {
+  const name  = document.getElementById('reg-name').value.trim()
+  const email = document.getElementById('reg-email').value.trim()
+  const pw    = document.getElementById('reg-password').value
+  const pw2   = document.getElementById('reg-password2').value
+  if (!name||!email||!pw) return showAlert('Compila tutti i campi.')
+  if (pw.length < 8)       return showAlert('Password min. 8 caratteri.')
+  if (pw !== pw2)          return showAlert('Le password non coincidono.')
+  const { error } = await sb.auth.signUp({ email, password: pw,
+    options: { data: { full_name: name } } })
+  if (error) return showAlert('Errore: ' + error.message)
+  showAlert('Account creato! Controlla la tua email per confermare, poi accedi.', 'success')
+  setTimeout(() => switchTab('login'), 3000)
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return
+  document.getElementById('tab-login').classList.contains('hidden') ? register() : login()
+})
+</script>
+</body>
+</html>

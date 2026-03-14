@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Matrice Servizi — 4D Sistemi</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ── Topbar ─────────────────────────────────────────────── -->
+<header class="topbar">
+  <span class="topbar-logo">4D Sistemi — Matrice Servizi</span>
+  <div class="topbar-right">
+    <span class="topbar-name" id="top-name"></span>
+    <span class="badge" id="top-badge"></span>
+    <a id="admin-link" href="admin.html" class="btn btn-secondary btn-sm hidden">Pannello Admin</a>
+    <button class="btn-link" onclick="logout()">Esci</button>
+  </div>
+</header>
+
+<!-- ── Legend ─────────────────────────────────────────────── -->
+<div style="display:flex;gap:16px;padding:1rem 1.5rem 0;flex-wrap:wrap;font-size:12px;color:var(--muted)">
+  <span>Settori:</span>
+  <span style="color:var(--sec-color)">● Security</span>
+  <span style="color:var(--con-color)">● Continuity</span>
+  <span style="color:var(--wor-color)">● Workplace</span>
+  <span style="color:var(--inf-color)">● Infrastructure</span>
+  <span style="color:var(--man-color)">● Management</span>
+  <span style="margin-left:8px">Copertura:</span>
+  <span style="color:var(--full)">● Piena</span>
+  <span style="color:var(--partial)">● Parziale</span>
+  <span style="color:var(--gap)">● Gap</span>
+</div>
+
+<!-- ── Matrix ─────────────────────────────────────────────── -->
+<div class="matrix-wrap">
+  <table class="matrix-table" id="matrix-table">
+    <thead id="matrix-head"></thead>
+    <tbody id="matrix-body"></tbody>
+  </table>
+</div>
+
+<!-- ── Detail panel ───────────────────────────────────────── -->
+<div id="detail-panel" class="detail-panel hidden">
+  <div class="detail-header">
+    <span class="detail-sector-badge" id="d-sector-badge"></span>
+    <span class="detail-title" id="d-title"></span>
+    <span class="detail-cov" id="d-cov-badge"></span>
+  </div>
+  <div class="items-grid" id="d-items"></div>
+  <div class="detail-actions">
+    <button id="d-suggest-btn" class="btn btn-primary btn-sm" onclick="openSuggestModal()">
+      + Proponi modifica
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="closeDetail()">Chiudi</button>
+  </div>
+</div>
+
+<!-- ── My suggestions ─────────────────────────────────────── -->
+<div class="suggestions-section">
+  <div class="section-title" id="my-sug-title" style="display:none">I miei suggerimenti</div>
+  <div id="my-suggestions"></div>
+</div>
+
+<!-- ── Suggestion Modal ───────────────────────────────────── -->
+<div id="suggest-modal" class="modal-overlay hidden" onclick="closeModalOnOverlay(event)">
+  <div class="modal-box">
+    <div class="modal-title">Proponi una modifica</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:1rem" id="modal-cell-desc"></p>
+
+    <div class="form-group">
+      <label>Tipo di suggerimento</label>
+      <select id="sug-type" onchange="onTypeChange()">
+        <option value="add_item">Aggiungi un servizio/prodotto</option>
+        <option value="change_coverage">Modifica la copertura</option>
+        <option value="change_label">Modifica il titolo della cella</option>
+        <option value="general_note">Nota generale</option>
+      </select>
+    </div>
+
+    <!-- add_item fields -->
+    <div id="f-add_item">
+      <div class="form-group">
+        <label>Nome servizio / prodotto</label>
+        <input type="text" id="sug-item-name" placeholder="es. Acronis Cyber Backup">
+      </div>
+      <div class="form-group">
+        <label>Descrizione breve</label>
+        <input type="text" id="sug-item-desc" placeholder="es. Backup cloud per PMI con deduplicazione">
+      </div>
+    </div>
+
+    <!-- change_coverage fields -->
+    <div id="f-change_coverage" class="hidden">
+      <div class="form-group">
+        <label>Nuova copertura proposta</label>
+        <select id="sug-cov">
+          <option value="full">Piena (abbiamo tutto)</option>
+          <option value="partial">Parziale (manca qualcosa)</option>
+          <option value="gap">Gap (non copriamo)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Motivazione</label>
+        <textarea id="sug-cov-reason" placeholder="Perché proponi questo cambiamento?"></textarea>
+      </div>
+    </div>
+
+    <!-- change_label fields -->
+    <div id="f-change_label" class="hidden">
+      <div class="form-group">
+        <label>Nuovo titolo proposto</label>
+        <input type="text" id="sug-label-new" placeholder="es. Backup & Disaster Recovery">
+      </div>
+      <div class="form-group">
+        <label>Motivazione</label>
+        <textarea id="sug-label-reason" placeholder="Perché proponi questo cambiamento?"></textarea>
+      </div>
+    </div>
+
+    <!-- general_note fields -->
+    <div id="f-general_note" class="hidden">
+      <div class="form-group">
+        <label>La tua nota</label>
+        <textarea id="sug-note" placeholder="Scrivi qui il tuo suggerimento..."></textarea>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeSuggestModal()">Annulla</button>
+      <button class="btn btn-primary" id="modal-submit-btn" onclick="submitSuggestion()">Invia suggerimento</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ──────────────────────────────────────────────── -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
+const SECTORS = [
+  { id:'sec', label:'Security',       sub:'Protezione dalle minacce esterne',          color:'var(--sec-color)', bg:'var(--sec-bg)' },
+  { id:'con', label:'Continuity',     sub:'Accessibilità ai dati garantita',           color:'var(--con-color)', bg:'var(--con-bg)' },
+  { id:'wor', label:'Workplace',      sub:'Strumenti per gli utenti',                  color:'var(--wor-color)', bg:'var(--wor-bg)' },
+  { id:'inf', label:'Infrastructure', sub:'Infrastrutture di collegamento e calcolo',  color:'var(--inf-color)', bg:'var(--inf-bg)' },
+  { id:'man', label:'Management',     sub:'Sistemi gestionali',                        color:'var(--man-color)', bg:'var(--man-bg)' },
+]
+const ACTIVITIES = ['Consulenza','Progettazione','Fornitura / Produzione','Installazione','Manutenzione']
+const COV_COLORS = { full:'var(--full)', partial:'var(--partial)', gap:'var(--gap)' }
+const COV_LABELS = { full:'Copertura piena', partial:'Copertura parziale', gap:'Gap' }
+
+let cells = {}       // keyed by cell id
+let currentCell = null
+let currentUser = null
+let currentProfile = null
+
+async function init() {
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return window.location.href = 'index.html'
+  currentUser = session.user
+
+  // load profile
+  const { data: profile } = await sb.from('profiles').select('*').eq('id', currentUser.id).single()
+  currentProfile = profile
+
+  // topbar
+  document.getElementById('top-name').textContent = profile.full_name || profile.email
+  const badge = document.getElementById('top-badge')
+  badge.textContent = profile.role
+  badge.className = 'badge badge-' + (profile.role === 'admin' ? 'admin' : profile.role === 'viewer' ? 'viewer' : 'contrib')
+  if (profile.role === 'admin') document.getElementById('admin-link').classList.remove('hidden')
+  if (profile.role === 'viewer') document.getElementById('d-suggest-btn').style.display = 'none'
+
+  // load matrix cells
+  const { data: dbCells } = await sb.from('matrix_cells').select('*')
+  if (dbCells) dbCells.forEach(c => cells[c.id] = c)
+
+  renderMatrix()
+  loadMySuggestions()
+}
+
+function renderMatrix() {
+  // head
+  let head = '<tr><th class="sector-th">Settore</th>'
+  ACTIVITIES.forEach(a => head += `<th>${a}</th>`)
+  head += '</tr>'
+  document.getElementById('matrix-head').innerHTML = head
+
+  // body
+  let body = ''
+  SECTORS.forEach(s => {
+    body += `<tr>
+      <th class="sector-th" style="color:${s.color}">
+        ${s.label}<br>
+        <span style="font-size:10px;font-weight:400;color:var(--muted)">${s.sub}</span>
+      </th>`
+    for (let i = 0; i < 5; i++) {
+      const id = `${s.id}-${i}`
+      const cell = cells[id]
+      if (!cell) { body += '<td></td>'; continue }
+      const covColor = COV_COLORS[cell.coverage]
+      body += `<td>
+        <div class="matrix-cell" id="mc-${id}"
+             style="background:${s.bg}"
+             onclick="showDetail('${id}')">
+          <div class="cell-label" style="color:${s.color}">${cell.label}</div>
+          <div class="cell-dots">
+            ${cell.items.slice(0,4).map(() =>
+              `<div class="cell-dot" style="background:${s.color}"></div>`).join('')}
+            ${cell.items.length > 4 ? `<span style="font-size:10px;color:${s.color}">+${cell.items.length-4}</span>` : ''}
+          </div>
+          <div class="cell-cov">
+            <div class="cov-dot" style="background:${covColor}"></div>
+            <span class="cov-text">${COV_LABELS[cell.coverage]}</span>
+          </div>
+        </div>
+      </td>`
+    }
+    body += '</tr>'
+  })
+  document.getElementById('matrix-body').innerHTML = body
+}
+
+function showDetail(id) {
+  // deactivate previous
+  if (currentCell) document.getElementById('mc-' + currentCell)?.classList.remove('active')
+  currentCell = id
+  document.getElementById('mc-' + id)?.classList.add('active')
+
+  const cell = cells[id]
+  const sector = SECTORS.find(s => id.startsWith(s.id))
+  const actIdx = parseInt(id.split('-')[1])
+
+  // sector badge
+  const sb_el = document.getElementById('d-sector-badge')
+  sb_el.textContent = sector.label
+  sb_el.style.background = sector.bg
+  sb_el.style.color = sector.color
+
+  document.getElementById('d-title').textContent = ACTIVITIES[actIdx] + ' — ' + cell.label
+
+  const cov = document.getElementById('d-cov-badge')
+  cov.textContent = COV_LABELS[cell.coverage]
+  cov.style.background = cell.coverage==='full'?'#EAF3DE':cell.coverage==='partial'?'#FFF3CD':'#FCEBEB'
+  cov.style.color = cell.coverage==='full'?'#3B6D11':cell.coverage==='partial'?'#856404':'#A32D2D'
+
+  document.getElementById('d-items').innerHTML = cell.items.map(it =>
+    `<div class="item-card">
+      <div class="item-name">${it.n}</div>
+      <div class="item-desc">${it.d}</div>
+    </div>`
+  ).join('')
+
+  document.getElementById('detail-panel').classList.remove('hidden')
+  document.getElementById('detail-panel').scrollIntoView({ behavior:'smooth', block:'nearest' })
+}
+
+function closeDetail() {
+  document.getElementById('detail-panel').classList.add('hidden')
+  if (currentCell) document.getElementById('mc-' + currentCell)?.classList.remove('active')
+  currentCell = null
+}
+
+// ── Suggestion modal ─────────────────────────────────────────
+
+function openSuggestModal() {
+  if (!currentCell) return
+  const cell = cells[currentCell]
+  const sector = SECTORS.find(s => currentCell.startsWith(s.id))
+  const actIdx = parseInt(currentCell.split('-')[1])
+  document.getElementById('modal-cell-desc').textContent =
+    `Cella: ${sector.label} × ${ACTIVITIES[actIdx]} — "${cell.label}"`
+  document.getElementById('suggest-modal').classList.remove('hidden')
+}
+
+function closeSuggestModal() {
+  document.getElementById('suggest-modal').classList.add('hidden')
+  resetModal()
+}
+
+function closeModalOnOverlay(e) {
+  if (e.target.id === 'suggest-modal') closeSuggestModal()
+}
+
+function onTypeChange() {
+  const t = document.getElementById('sug-type').value
+  ;['add_item','change_coverage','change_label','general_note'].forEach(type => {
+    document.getElementById('f-' + type).classList.toggle('hidden', type !== t)
+  })
+}
+
+function resetModal() {
+  document.getElementById('sug-type').value = 'add_item'
+  onTypeChange()
+  ;['sug-item-name','sug-item-desc','sug-cov-reason','sug-label-new','sug-label-reason','sug-note'].forEach(id => {
+    const el = document.getElementById(id)
+    if (el) el.value = ''
+  })
+  document.getElementById('sug-cov').value = 'full'
+}
+
+async function submitSuggestion() {
+  const type = document.getElementById('sug-type').value
+  let content = {}
+
+  if (type === 'add_item') {
+    const name = document.getElementById('sug-item-name').value.trim()
+    const desc = document.getElementById('sug-item-desc').value.trim()
+    if (!name) return toast('Inserisci almeno il nome del servizio.', 'error')
+    content = { name, description: desc }
+  } else if (type === 'change_coverage') {
+    const cov = document.getElementById('sug-cov').value
+    const reason = document.getElementById('sug-cov-reason').value.trim()
+    if (!reason) return toast('Inserisci una motivazione.', 'error')
+    content = { new_coverage: cov, reason }
+  } else if (type === 'change_label') {
+    const label = document.getElementById('sug-label-new').value.trim()
+    const reason = document.getElementById('sug-label-reason').value.trim()
+    if (!label) return toast('Inserisci il nuovo titolo.', 'error')
+    content = { new_label: label, reason }
+  } else {
+    const note = document.getElementById('sug-note').value.trim()
+    if (!note) return toast('Scrivi la tua nota.', 'error')
+    content = { note }
+  }
+
+  const btn = document.getElementById('modal-submit-btn')
+  btn.disabled = true; btn.textContent = 'Invio...'
+
+  const { error } = await sb.from('suggestions').insert({
+    cell_id: currentCell,
+    suggested_by: currentUser.id,
+    suggestion_type: type,
+    content
+  })
+
+  btn.disabled = false; btn.textContent = 'Invia suggerimento'
+
+  if (error) return toast('Errore: ' + error.message, 'error')
+  closeSuggestModal()
+  toast('Suggerimento inviato! Un admin lo revisionerà presto.', 'success')
+  loadMySuggestions()
+}
+
+// ── My suggestions ───────────────────────────────────────────
+
+async function loadMySuggestions() {
+  if (currentProfile?.role === 'viewer') return
+
+  const { data } = await sb.from('suggestions')
+    .select('*, reviewer:reviewed_by(full_name)')
+    .eq('suggested_by', currentUser.id)
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  if (!data || data.length === 0) return
+
+  document.getElementById('my-sug-title').style.display = 'block'
+
+  const rows = data.map(s => {
+    const cell = cells[s.cell_id]
+    const sector = SECTORS.find(sec => s.cell_id.startsWith(sec.id))
+    const actIdx = parseInt(s.cell_id.split('-')[1])
+    const cellLabel = cell ? `${sector?.label} × ${ACTIVITIES[actIdx]}` : s.cell_id
+    const typeLabels = {add_item:'Aggiungi servizio',change_coverage:'Cambia copertura',
+                        change_label:'Cambia titolo',general_note:'Nota'}
+    const contentStr = s.suggestion_type === 'add_item'
+      ? s.content.name + (s.content.description ? ' — ' + s.content.description : '')
+      : s.suggestion_type === 'general_note' ? s.content.note
+      : JSON.stringify(s.content)
+    return `<tr>
+      <td>${cellLabel}</td>
+      <td>${typeLabels[s.suggestion_type] || s.suggestion_type}</td>
+      <td style="max-width:220px">${contentStr}</td>
+      <td><span class="status-badge status-${s.status}">${s.status}</span></td>
+      <td style="color:var(--muted);font-size:11px">${s.review_note || ''}</td>
+    </tr>`
+  }).join('')
+
+  document.getElementById('my-suggestions').innerHTML = `
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="sug-table">
+        <thead><tr><th>Cella</th><th>Tipo</th><th>Contenuto</th><th>Stato</th><th>Nota revisione</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`
+}
+
+// ── Utils ─────────────────────────────────────────────────────
+
+function toast(msg, type='success') {
+  const el = document.getElementById('toast')
+  el.textContent = msg
+  el.className = 'toast ' + type
+  setTimeout(() => el.className = 'toast hidden', 3500)
+}
+
+async function logout() {
+  await sb.auth.signOut()
+  window.location.href = 'index.html'
+}
+
+init()
+</script>
+</body>
+</html>

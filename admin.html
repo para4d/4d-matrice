@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — 4D Sistemi</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <span class="topbar-logo">4D Sistemi — Pannello Admin</span>
+  <div class="topbar-right">
+    <span class="topbar-name" id="top-name"></span>
+    <span class="badge badge-admin">admin</span>
+    <a href="matrix.html" class="btn btn-secondary btn-sm">← Matrice</a>
+    <button class="btn-link" onclick="logout()">Esci</button>
+  </div>
+</header>
+
+<!-- Stats -->
+<div class="stats-row" id="stats-row">
+  <div class="stat-card"><div class="stat-val" id="stat-pending">—</div><div class="stat-label">Suggerimenti in attesa</div></div>
+  <div class="stat-card"><div class="stat-val" id="stat-total">—</div><div class="stat-label">Suggerimenti totali</div></div>
+  <div class="stat-card"><div class="stat-val" id="stat-users">—</div><div class="stat-label">Collaboratori registrati</div></div>
+</div>
+
+<div class="page-content">
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('suggestions')">Suggerimenti <span id="pending-badge"></span></button>
+    <button class="tab-btn" onclick="switchTab('users')">Gestione utenti</button>
+    <button class="tab-btn" onclick="switchTab('matrix')">Modifica matrice</button>
+  </div>
+
+  <!-- TAB: Suggerimenti -->
+  <div id="tab-suggestions">
+    <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap">
+      <button class="btn btn-secondary btn-sm" onclick="filterSuggestions('pending')">In attesa</button>
+      <button class="btn btn-secondary btn-sm" onclick="filterSuggestions('approved')">Approvati</button>
+      <button class="btn btn-secondary btn-sm" onclick="filterSuggestions('rejected')">Rifiutati</button>
+      <button class="btn btn-secondary btn-sm" onclick="filterSuggestions('all')">Tutti</button>
+    </div>
+    <div id="suggestions-list">
+      <p style="color:var(--muted);font-size:13px">Caricamento...</p>
+    </div>
+  </div>
+
+  <!-- TAB: Utenti -->
+  <div id="tab-users" class="hidden">
+    <div id="users-list">
+      <p style="color:var(--muted);font-size:13px">Caricamento...</p>
+    </div>
+  </div>
+
+  <!-- TAB: Modifica matrice -->
+  <div id="tab-matrix" class="hidden">
+    <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">
+      Clicca su una cella per modificarla direttamente. Attenzione: le modifiche sono immediate.
+    </p>
+    <div id="cell-editor" style="display:none" class="card" style="margin-bottom:1rem">
+      <p class="modal-title" id="editor-title"></p>
+      <div class="form-group" style="margin-top:1rem">
+        <label>Copertura</label>
+        <select id="editor-cov">
+          <option value="full">Piena</option>
+          <option value="partial">Parziale</option>
+          <option value="gap">Gap</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Titolo cella</label>
+        <input type="text" id="editor-label">
+      </div>
+      <div class="form-group">
+        <label>Servizi/prodotti (uno per riga: Nome | Descrizione)</label>
+        <textarea id="editor-items" rows="8" style="font-family:monospace;font-size:12px"></textarea>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" onclick="saveCell()">Salva modifiche</button>
+        <button class="btn btn-secondary" onclick="closeEditor()">Annulla</button>
+      </div>
+    </div>
+    <div class="matrix-wrap" style="padding:0">
+      <table class="matrix-table" id="admin-matrix-table">
+        <thead id="admin-matrix-head"></thead>
+        <tbody id="admin-matrix-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
+const SECTORS = [
+  { id:'sec', label:'Security',       color:'var(--sec-color)', bg:'var(--sec-bg)' },
+  { id:'con', label:'Continuity',     color:'var(--con-color)', bg:'var(--con-bg)' },
+  { id:'wor', label:'Workplace',      color:'var(--wor-color)', bg:'var(--wor-bg)' },
+  { id:'inf', label:'Infrastructure', color:'var(--inf-color)', bg:'var(--inf-bg)' },
+  { id:'man', label:'Management',     color:'var(--man-color)', bg:'var(--man-bg)' },
+]
+const ACTIVITIES = ['Consulenza','Progettazione','Fornitura','Installazione','Manutenzione']
+const COV_LABELS = { full:'Piena', partial:'Parziale', gap:'Gap' }
+
+let cells = {}
+let allSuggestions = []
+let currentSugFilter = 'pending'
+let editingCellId = null
+
+async function init() {
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return window.location.href = 'index.html'
+
+  const { data: profile } = await sb.from('profiles').select('*').eq('id', session.user.id).single()
+  if (!profile || profile.role !== 'admin') return window.location.href = 'matrix.html'
+
+  document.getElementById('top-name').textContent = profile.full_name || profile.email
+
+  await loadData()
+}
+
+async function loadData() {
+  const [{ data: dbCells }, { data: sugs }, { data: users }] = await Promise.all([
+    sb.from('matrix_cells').select('*'),
+    sb.from('suggestions').select('*, submitter:suggested_by(full_name,email), reviewer:reviewed_by(full_name)').order('created_at', { ascending: false }),
+    sb.from('profiles').select('*').order('created_at')
+  ])
+
+  if (dbCells) dbCells.forEach(c => cells[c.id] = c)
+  allSuggestions = sugs || []
+
+  const pending = allSuggestions.filter(s => s.status === 'pending').length
+  document.getElementById('stat-pending').textContent = pending
+  document.getElementById('stat-total').textContent = allSuggestions.length
+  document.getElementById('stat-users').textContent = users?.length || 0
+  document.getElementById('pending-badge').textContent = pending > 0 ? ` (${pending})` : ''
+
+  renderSuggestions()
+  renderUsers(users || [])
+  renderAdminMatrix()
+}
+
+// ── Tab switching ─────────────────────────────────────────────
+
+function switchTab(t) {
+  ;['suggestions','users','matrix'].forEach(id => {
+    document.getElementById('tab-' + id).classList.toggle('hidden', id !== t)
+  })
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', ['suggestions','users','matrix'][i] === t)
+  })
+}
+
+// ── Suggestions ───────────────────────────────────────────────
+
+function filterSuggestions(f) {
+  currentSugFilter = f
+  renderSuggestions()
+}
+
+function renderSuggestions() {
+  const list = currentSugFilter === 'all' ? allSuggestions
+    : allSuggestions.filter(s => s.status === currentSugFilter)
+
+  if (list.length === 0) {
+    document.getElementById('suggestions-list').innerHTML =
+      `<p style="color:var(--muted);font-size:13px">Nessun suggerimento ${currentSugFilter === 'pending' ? 'in attesa' : ''} al momento.</p>`
+    return
+  }
+
+  const html = list.map(s => {
+    const cell = cells[s.cell_id]
+    const sector = SECTORS.find(sec => s.cell_id?.startsWith(sec.id))
+    const actIdx = parseInt(s.cell_id?.split('-')[1])
+    const cellLabel = cell ? `${sector?.label} × ${ACTIVITIES[actIdx]} — "${cell.label}"` : s.cell_id
+    const typeLabels = { add_item:'Aggiungi servizio', change_coverage:'Cambia copertura',
+                         change_label:'Cambia titolo', general_note:'Nota' }
+    const date = new Date(s.created_at).toLocaleDateString('it-IT')
+
+    let contentHtml = ''
+    if (s.suggestion_type === 'add_item') {
+      contentHtml = `<strong>${s.content.name}</strong>${s.content.description ? ' — ' + s.content.description : ''}`
+    } else if (s.suggestion_type === 'change_coverage') {
+      contentHtml = `Copertura proposta: <strong>${COV_LABELS[s.content.new_coverage]}</strong><br>${s.content.reason}`
+    } else if (s.suggestion_type === 'change_label') {
+      contentHtml = `Nuovo titolo: <strong>${s.content.new_label}</strong><br>${s.content.reason||''}`
+    } else {
+      contentHtml = s.content.note
+    }
+
+    const reviewNote = s.status !== 'pending'
+      ? `<div style="margin-top:6px;font-size:11px;color:var(--muted)">
+           Revisore: ${s.reviewer?.full_name || '—'} · ${s.review_note ? 'Note: ' + s.review_note : ''}
+         </div>` : ''
+
+    const actions = s.status === 'pending' ? `
+      <div style="margin-top:8px">
+        <input type="text" id="note-${s.id}" placeholder="Nota opzionale (visibile al collaboratore)" style="margin-bottom:6px">
+        <div class="sug-card-actions">
+          <button class="btn btn-success btn-sm" onclick="reviewSuggestion('${s.id}','approved')">Approva</button>
+          <button class="btn btn-danger btn-sm" onclick="reviewSuggestion('${s.id}','rejected')">Rifiuta</button>
+        </div>
+      </div>` : `<span class="status-badge status-${s.status}" style="margin-top:6px;display:inline-block">${s.status}</span>`
+
+    return `<div class="sug-card">
+      <div class="sug-card-header">
+        <div>
+          <div class="sug-card-cell">${cellLabel}</div>
+          <div class="sug-card-type">${typeLabels[s.suggestion_type]}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="sug-card-by">${s.submitter?.full_name || s.submitter?.email || '—'}</div>
+          <div style="font-size:10px;color:var(--muted)">${date}</div>
+        </div>
+      </div>
+      <div class="sug-card-content">${contentHtml}</div>
+      ${reviewNote}
+      ${actions}
+    </div>`
+  }).join('')
+
+  document.getElementById('suggestions-list').innerHTML = html
+}
+
+async function reviewSuggestion(sugId, status) {
+  const sug = allSuggestions.find(s => s.id === sugId)
+  if (!sug) return
+
+  const note = document.getElementById('note-' + sugId)?.value?.trim() || null
+  const { data: { user } } = await sb.auth.getUser()
+
+  const updateData = { status, review_note: note, reviewed_by: user.id,
+                       reviewed_at: new Date().toISOString() }
+
+  // If approving, update the matrix cell
+  if (status === 'approved') {
+    const cell = cells[sug.cell_id]
+    if (!cell) return toast('Cella non trovata.', 'error')
+
+    if (sug.suggestion_type === 'add_item') {
+      const newItems = [...cell.items, { n: sug.content.name, d: sug.content.description || '' }]
+      await sb.from('matrix_cells').update({ items: newItems, updated_at: new Date().toISOString(),
+        updated_by: user.id }).eq('id', sug.cell_id)
+      cells[sug.cell_id].items = newItems
+    } else if (sug.suggestion_type === 'change_coverage') {
+      await sb.from('matrix_cells').update({ coverage: sug.content.new_coverage,
+        updated_at: new Date().toISOString(), updated_by: user.id }).eq('id', sug.cell_id)
+      cells[sug.cell_id].coverage = sug.content.new_coverage
+    } else if (sug.suggestion_type === 'change_label') {
+      await sb.from('matrix_cells').update({ label: sug.content.new_label,
+        updated_at: new Date().toISOString(), updated_by: user.id }).eq('id', sug.cell_id)
+      cells[sug.cell_id].label = sug.content.new_label
+    }
+  }
+
+  const { error } = await sb.from('suggestions').update(updateData).eq('id', sugId)
+  if (error) return toast('Errore: ' + error.message, 'error')
+
+  // Update local state
+  const idx = allSuggestions.findIndex(s => s.id === sugId)
+  if (idx !== -1) { allSuggestions[idx] = { ...allSuggestions[idx], ...updateData } }
+
+  const pending = allSuggestions.filter(s => s.status === 'pending').length
+  document.getElementById('stat-pending').textContent = pending
+  document.getElementById('pending-badge').textContent = pending > 0 ? ` (${pending})` : ''
+
+  renderSuggestions()
+  toast(status === 'approved' ? 'Suggerimento approvato e matrice aggiornata!' : 'Suggerimento rifiutato.', 'success')
+}
+
+// ── Users ─────────────────────────────────────────────────────
+
+function renderUsers(users) {
+  if (users.length === 0) {
+    document.getElementById('users-list').innerHTML = '<p style="color:var(--muted);font-size:13px">Nessun utente registrato.</p>'
+    return
+  }
+  const rows = users.map(u => `<tr>
+    <td>${u.full_name || '—'}</td>
+    <td style="color:var(--muted)">${u.email}</td>
+    <td>${new Date(u.created_at).toLocaleDateString('it-IT')}</td>
+    <td>
+      <select class="role-select" onchange="changeRole('${u.id}', this.value)">
+        <option value="viewer"      ${u.role==='viewer'?'selected':''}>viewer</option>
+        <option value="contributor" ${u.role==='contributor'?'selected':''}>contributor</option>
+        <option value="admin"       ${u.role==='admin'?'selected':''}>admin</option>
+      </select>
+    </td>
+  </tr>`).join('')
+
+  document.getElementById('users-list').innerHTML = `
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="users-table">
+        <thead><tr><th>Nome</th><th>Email</th><th>Registrato</th><th>Ruolo</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-top:8px">
+      viewer = solo lettura · contributor = può suggerire · admin = approva e modifica
+    </p>`
+}
+
+async function changeRole(userId, newRole) {
+  const { error } = await sb.from('profiles').update({ role: newRole }).eq('id', userId)
+  if (error) return toast('Errore cambio ruolo: ' + error.message, 'error')
+  toast(`Ruolo aggiornato a "${newRole}"`, 'success')
+}
+
+// ── Direct cell editor ────────────────────────────────────────
+
+function renderAdminMatrix() {
+  let head = '<tr><th class="sector-th">Settore</th>'
+  ACTIVITIES.forEach(a => head += `<th>${a}</th>`)
+  head += '</tr>'
+  document.getElementById('admin-matrix-head').innerHTML = head
+
+  let body = ''
+  SECTORS.forEach(s => {
+    body += `<tr><th class="sector-th" style="color:${s.color}">${s.label}</th>`
+    for (let i = 0; i < 5; i++) {
+      const id = `${s.id}-${i}`
+      const cell = cells[id]
+      if (!cell) { body += '<td></td>'; continue }
+      body += `<td>
+        <div class="matrix-cell" style="background:${s.bg}" onclick="openEditor('${id}')">
+          <div class="cell-label" style="color:${s.color}">${cell.label}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">${cell.items.length} voci · ${COV_LABELS[cell.coverage]}</div>
+          <div style="font-size:10px;color:var(--red);margin-top:3px">✎ modifica</div>
+        </div>
+      </td>`
+    }
+    body += '</tr>'
+  })
+  document.getElementById('admin-matrix-body').innerHTML = body
+}
+
+function openEditor(cellId) {
+  editingCellId = cellId
+  const cell = cells[cellId]
+  const sector = SECTORS.find(s => cellId.startsWith(s.id))
+  const actIdx = parseInt(cellId.split('-')[1])
+
+  document.getElementById('editor-title').textContent =
+    `Modifica: ${sector.label} × ${ACTIVITIES[actIdx]}`
+  document.getElementById('editor-cov').value = cell.coverage
+  document.getElementById('editor-label').value = cell.label
+  document.getElementById('editor-items').value =
+    cell.items.map(it => `${it.n} | ${it.d}`).join('\n')
+
+  document.getElementById('cell-editor').style.display = 'block'
+  document.getElementById('cell-editor').scrollIntoView({ behavior:'smooth', block:'start' })
+}
+
+function closeEditor() {
+  document.getElementById('cell-editor').style.display = 'none'
+  editingCellId = null
+}
+
+async function saveCell() {
+  if (!editingCellId) return
+  const { data: { user } } = await sb.auth.getUser()
+
+  const cov   = document.getElementById('editor-cov').value
+  const label = document.getElementById('editor-label').value.trim()
+  const raw   = document.getElementById('editor-items').value.trim()
+
+  if (!label) return toast('Il titolo non può essere vuoto.', 'error')
+
+  const items = raw.split('\n')
+    .map(l => l.trim()).filter(Boolean)
+    .map(l => {
+      const [n, ...rest] = l.split('|')
+      return { n: n.trim(), d: rest.join('|').trim() }
+    })
+
+  const { error } = await sb.from('matrix_cells').update({
+    coverage: cov, label, items,
+    updated_at: new Date().toISOString(), updated_by: user.id
+  }).eq('id', editingCellId)
+
+  if (error) return toast('Errore: ' + error.message, 'error')
+
+  cells[editingCellId] = { ...cells[editingCellId], coverage: cov, label, items }
+  renderAdminMatrix()
+  closeEditor()
+  toast('Cella aggiornata!', 'success')
+}
+
+// ── Utils ─────────────────────────────────────────────────────
+
+function toast(msg, type='success') {
+  const el = document.getElementById('toast')
+  el.textContent = msg
+  el.className = 'toast ' + type
+  setTimeout(() => el.className = 'toast hidden', 3500)
+}
+
+async function logout() {
+  await sb.auth.signOut()
+  window.location.href = 'index.html'
+}
+
+init()
+</script>
+</body>
+</html>
