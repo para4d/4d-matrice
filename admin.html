@@ -32,6 +32,7 @@
     <button class="tab-btn active" onclick="switchTab('suggestions')">Suggerimenti <span id="pending-badge"></span></button>
     <button class="tab-btn" onclick="switchTab('users')">Gestione utenti</button>
     <button class="tab-btn" onclick="switchTab('matrix')">Modifica matrice</button>
+    <button class="tab-btn" onclick="switchTab('log')">Log attività</button>
   </div>
 
   <!-- TAB: Suggerimenti -->
@@ -87,6 +88,27 @@
         <thead id="admin-matrix-head"></thead>
         <tbody id="admin-matrix-body"></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- TAB: Log attività -->
+  <div id="tab-log" class="hidden">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="filterLog('all')">Tutti</button>
+        <button class="btn btn-secondary btn-sm" onclick="filterLog('cell_updated')">Modifiche celle</button>
+        <button class="btn btn-secondary btn-sm" onclick="filterLog('suggestion_submitted')">Suggerimenti inviati</button>
+        <button class="btn btn-secondary btn-sm" onclick="filterLog('suggestion_approved')">Approvazioni</button>
+        <button class="btn btn-secondary btn-sm" onclick="filterLog('suggestion_rejected')">Rifiuti</button>
+        <button class="btn btn-secondary btn-sm" onclick="filterLog('role_changed')">Cambi ruolo</button>
+      </div>
+      <div id="log-size-badge" style="font-size:12px;color:var(--muted)"></div>
+    </div>
+    <div id="log-list">
+      <p style="color:var(--muted);font-size:13px">Caricamento...</p>
+    </div>
+    <div style="margin-top:10px;text-align:center">
+      <button id="log-load-more" class="btn btn-secondary btn-sm hidden" onclick="loadMoreLog()">Carica altri</button>
     </div>
   </div>
 
@@ -151,12 +173,13 @@ async function loadData() {
 // ── Tab switching ─────────────────────────────────────────────
 
 function switchTab(t) {
-  ;['suggestions','users','matrix'].forEach(id => {
+  ;['suggestions','users','matrix','log'].forEach(id => {
     document.getElementById('tab-' + id).classList.toggle('hidden', id !== t)
   })
   document.querySelectorAll('.tab-btn').forEach((b,i) => {
-    b.classList.toggle('active', ['suggestions','users','matrix'][i] === t)
+    b.classList.toggle('active', ['suggestions','users','matrix','log'][i] === t)
   })
+  if (t === 'log') loadLog()
 }
 
 // ── Suggestions ───────────────────────────────────────────────
@@ -392,6 +415,133 @@ async function saveCell() {
   renderAdminMatrix()
   closeEditor()
   toast('Cella aggiornata!', 'success')
+}
+
+// ── Audit Log ─────────────────────────────────────────────────
+
+let logFilter = 'all'
+let logOffset = 0
+const LOG_PAGE = 50
+
+const ACTION_LABELS = {
+  cell_updated:          'Cella modificata',
+  suggestion_submitted:  'Suggerimento inviato',
+  suggestion_approved:   'Suggerimento approvato',
+  suggestion_rejected:   'Suggerimento rifiutato',
+  role_changed:          'Ruolo cambiato',
+  user_login:            'Accesso utente',
+}
+const ACTION_COLORS = {
+  cell_updated:          '#185FA5',
+  suggestion_submitted:  '#854F0B',
+  suggestion_approved:   '#3B6D11',
+  suggestion_rejected:   '#A32D2D',
+  role_changed:          '#3C3489',
+  user_login:            '#555',
+}
+
+async function loadLog(reset = true) {
+  if (reset) { logOffset = 0 }
+
+  let query = sb.from('audit_log')
+    .select('*')
+    .order('ts', { ascending: false })
+    .range(logOffset, logOffset + LOG_PAGE - 1)
+
+  if (logFilter !== 'all') query = query.eq('action', logFilter)
+
+  const { data, error } = await query
+  if (error) return toast('Errore log: ' + error.message, 'error')
+
+  if (reset) {
+    renderLog(data || [], false)
+  } else {
+    renderLog(data || [], true)
+  }
+
+  document.getElementById('log-load-more').classList.toggle(
+    'hidden', !data || data.length < LOG_PAGE
+  )
+
+  // Mostra dimensione log
+  const { data: sizeData } = await sb.rpc('get_log_size')
+  if (sizeData) {
+    const mb = (sizeData / (1024*1024)).toFixed(2)
+    const pct = Math.min(100, Math.round(sizeData / (50*1024*1024) * 100))
+    const color = pct > 80 ? '#A32D2D' : pct > 50 ? '#854F0B' : '#3B6D11'
+    document.getElementById('log-size-badge').innerHTML =
+      `Dimensione log: <strong style="color:${color}">${mb} MB</strong> / 50 MB
+       <span style="display:inline-block;width:80px;height:6px;background:#eee;border-radius:3px;margin-left:6px;vertical-align:middle">
+         <span style="display:block;width:${pct}%;height:100%;background:${color};border-radius:3px"></span>
+       </span>`
+  }
+}
+
+function renderLog(entries, append) {
+  const container = document.getElementById('log-list')
+
+  if (entries.length === 0 && !append) {
+    container.innerHTML = '<p style="color:var(--muted);font-size:13px">Nessuna attività registrata.</p>'
+    return
+  }
+
+  const rows = entries.map(e => {
+    const color = ACTION_COLORS[e.action] || '#555'
+    const label = ACTION_LABELS[e.action] || e.action
+    const date  = new Date(e.ts).toLocaleString('it-IT')
+    const detail = formatDetail(e)
+    return `<tr>
+      <td style="color:var(--muted);font-size:11px;white-space:nowrap">${date}</td>
+      <td style="font-size:12px">${e.actor_email || '—'}</td>
+      <td><span style="font-size:11px;font-weight:600;color:${color};background:${color}18;
+                padding:2px 8px;border-radius:20px">${label}</span></td>
+      <td style="font-size:11px;color:var(--muted);max-width:260px">${detail}</td>
+    </tr>`
+  }).join('')
+
+  const tableHtml = `
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="sug-table">
+        <thead><tr><th>Data/ora</th><th>Utente</th><th>Azione</th><th>Dettaglio</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`
+
+  if (append) {
+    const existing = container.querySelector('tbody')
+    if (existing) { existing.insertAdjacentHTML('beforeend', rows); return }
+  }
+  container.innerHTML = tableHtml
+}
+
+function formatDetail(e) {
+  const d = e.detail || {}
+  switch (e.action) {
+    case 'cell_updated':
+      return `Cella <strong>${d.cell_id}</strong> — "${d.label}"
+              ${d.coverage_old !== d.coverage_new
+                ? ` · copertura: ${d.coverage_old} → ${d.coverage_new}` : ''}
+              · ${d.items_count} voci`
+    case 'suggestion_submitted':
+      return `Cella <strong>${d.cell_id}</strong> · tipo: ${d.suggestion_type}`
+    case 'suggestion_approved':
+    case 'suggestion_rejected':
+      return `Cella <strong>${d.cell_id}</strong>${d.review_note ? ' · "' + d.review_note + '"' : ''}`
+    case 'role_changed':
+      return `${d.user_email} · ${d.role_old} → <strong>${d.role_new}</strong>`
+    default:
+      return JSON.stringify(d).substring(0, 80)
+  }
+}
+
+function filterLog(f) {
+  logFilter = f
+  loadLog(true)
+}
+
+async function loadMoreLog() {
+  logOffset += LOG_PAGE
+  loadLog(false)
 }
 
 // ── Utils ─────────────────────────────────────────────────────
