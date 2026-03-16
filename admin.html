@@ -443,7 +443,7 @@ const ACTION_COLORS = {
 }
 
 // Campi su cui il rollback è supportato
-const ROLLBACKABLE_ACTIONS = ['cell_updated', 'role_changed']
+const ROLLBACKABLE_ACTIONS = ['cell_updated', 'role_changed', 'suggestion_approved']
 const ROLLBACKABLE_FIELDS  = ['label', 'coverage', 'items', 'role']
 
 async function loadLog(reset = true) {
@@ -562,24 +562,68 @@ function buildDetailHtml(e) {
     return `
       <div style="font-size:12px;margin-bottom:8px">
         <strong>Rollback del log #${d.original_log_id}</strong>
-        · azione originale: <em>${d.original_action}</em>
-        · eseguito da: <em>${d.original_actor}</em>
+        · azione originale: <em>${ACTION_LABELS[d.original_action] || d.original_action}</em>
+        · su: <em>${d.original_actor}</em>
       </div>
       <table style="font-size:12px;border-collapse:collapse;width:100%">
         <tr style="background:#f0f0f0">
           <th style="text-align:left;padding:5px 10px;font-weight:500">Campo</th>
-          <th style="text-align:left;padding:5px 10px;font-weight:500;color:#A32D2D">Valore ripristinato</th>
+          <th style="text-align:left;padding:5px 10px;font-weight:500;color:#3B6D11">Valore ripristinato</th>
         </tr>
         <tr>
-          <td style="padding:6px 10px;border-bottom:1px solid #eee">${d.field}</td>
-          <td style="padding:6px 10px;border-bottom:1px solid #eee;color:#3B6D11">
-            ${formatFieldValue(d.field, d.restored_to)}
+          <td style="padding:6px 10px">${d.field || 'intera cella'}</td>
+          <td style="padding:6px 10px;color:#3B6D11">
+            ${formatFieldValue(d.field || 'items', d.restored_to)}
           </td>
         </tr>
       </table>`
   }
 
-  // Entry con diff
+  // suggestion_approved: rollback speciale che ripristina intera cella
+  if (e.action === 'suggestion_approved') {
+    const stype   = d.suggestion_type || ''
+    const content = d.suggestion_content || {}
+    const hasBefore = !!d.cell_snapshot_before
+    const typeLabel = { add_item:'Aggiunta voce', change_coverage:'Cambio copertura',
+                        change_label:'Cambio titolo', general_note:'Nota' }[stype] || stype
+    let contentDesc = ''
+    if (stype === 'add_item')
+      contentDesc = `<strong>${content.name || ''}</strong>${content.description ? ' — ' + content.description : ''}`
+    else if (stype === 'change_coverage')
+      contentDesc = `Nuova copertura: <strong>${content.new_coverage || ''}</strong> · ${content.reason || ''}`
+    else if (stype === 'change_label')
+      contentDesc = `Nuovo titolo: <strong>${content.new_label || ''}</strong>`
+    else if (stype === 'general_note')
+      contentDesc = content.note || ''
+
+    return `
+      <table style="font-size:12px;border-collapse:collapse;width:100%;margin-bottom:12px">
+        <tr style="background:#f0f0f0">
+          <th style="text-align:left;padding:5px 10px;font-weight:500">Tipo</th>
+          <th style="text-align:left;padding:5px 10px;font-weight:500">Contenuto approvato</th>
+          <th style="text-align:left;padding:5px 10px;font-weight:500">Cella</th>
+        </tr>
+        <tr>
+          <td style="padding:6px 10px">${typeLabel}</td>
+          <td style="padding:6px 10px;color:#3B6D11">${contentDesc}</td>
+          <td style="padding:6px 10px;color:var(--muted)">${d.cell_id || '—'}</td>
+        </tr>
+      </table>
+      ${hasBefore
+        ? `<button class="btn btn-danger btn-sm"
+             onclick="confirmApprovalRollback(${e.id})">
+             ↩ Annulla approvazione e ripristina cella
+           </button>
+           <span style="font-size:11px;color:var(--muted);margin-left:8px">
+             Ripristina la cella allo stato precedente e segna il suggerimento come "reverted"
+           </span>`
+        : `<span style="font-size:11px;color:#ccc">
+             Rollback non disponibile — approvato prima dell'aggiornamento al log v3
+           </span>`
+      }`
+  }
+
+  // Entry con diff (cell_updated, role_changed, ecc.)
   const diff = d.diff
   if (!diff || !Array.isArray(diff) || diff.length === 0) {
     return `<pre style="font-size:11px;color:var(--muted);white-space:pre-wrap">${JSON.stringify(d, null, 2)}</pre>`
@@ -595,8 +639,10 @@ function buildDetailHtml(e) {
 
     return `<tr>
       <td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:500">${field}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee;color:#A32D2D;max-width:200px;word-break:break-word">${oldVal}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee;color:#3B6D11;max-width:200px;word-break:break-word">${newVal}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;color:#A32D2D;
+                 max-width:200px;word-break:break-word">${oldVal}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;color:#3B6D11;
+                 max-width:200px;word-break:break-word">${newVal}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #eee">
         ${canField
           ? `<button class="btn btn-secondary btn-sm"
@@ -615,7 +661,7 @@ function buildDetailHtml(e) {
         <th style="text-align:left;padding:5px 10px;font-weight:500;min-width:90px">Campo</th>
         <th style="text-align:left;padding:5px 10px;font-weight:500;color:#A32D2D">Valore precedente</th>
         <th style="text-align:left;padding:5px 10px;font-weight:500;color:#3B6D11">Valore nuovo</th>
-        <th style="padding:5px 10px;min-width:110px"></th>
+        <th style="padding:5px 10px;min-width:120px"></th>
       </tr>
       ${rows}
     </table>`
@@ -636,6 +682,30 @@ function formatFieldValue(field, val) {
 
 function escapeHtml(s) {
   return String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;')
+}
+
+async function confirmApprovalRollback(logId) {
+  const ok = confirm(
+    'Sei sicuro di voler annullare questa approvazione?\n\n' +
+    'La cella verrà ripristinata allo stato precedente.\n' +
+    'Il suggerimento verrà marcato come "reverted".\n' +
+    'L\'operazione verrà registrata nel log.'
+  )
+  if (!ok) return
+
+  const { data: { user } } = await sb.auth.getUser()
+
+  const { data, error } = await sb.rpc('rollback_audit_entry', {
+    p_log_id:   logId,
+    p_field:    'approval',
+    p_actor_id: user.id
+  })
+
+  if (error) return toast('Errore rollback: ' + error.message, 'error')
+  if (!data?.ok) return toast('Rollback fallito: ' + (data?.error || 'errore sconosciuto'), 'error')
+
+  toast('Approvazione annullata. Cella ripristinata e log aggiornato.', 'success')
+  loadLog(true)
 }
 
 async function confirmRollback(logId, field, oldValDisplay) {
