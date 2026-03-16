@@ -211,14 +211,65 @@ function renderSuggestions() {
 
     let contentHtml = ''
     if (s.suggestion_type === 'add_item') {
-      contentHtml = `<strong>${s.content.name}</strong>${s.content.description ? ' — ' + s.content.description : ''}`
+      contentHtml = `
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px">
+          <span style="color:var(--muted)">Nome:</span>
+          <strong>${s.content.name || '—'}</strong>
+          <span style="color:var(--muted)">Descrizione:</span>
+          <span>${s.content.description || '—'}</span>
+        </div>`
+    } else if (s.suggestion_type === 'edit_item') {
+      contentHtml = `
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px">
+          <span style="color:var(--muted)">Elemento:</span>
+          <strong>${s.content.current_name || '—'}</strong>
+          ${s.content.new_name ? `<span style="color:var(--muted)">Nuovo nome:</span><span style="color:#3B6D11"><strong>${s.content.new_name}</strong></span>` : ''}
+          ${s.content.new_desc ? `<span style="color:var(--muted)">Nuova descrizione:</span><span style="color:#3B6D11">${s.content.new_desc}</span>` : ''}
+          ${s.content.reason ? `<span style="color:var(--muted)">Motivazione:</span><em>${s.content.reason}</em>` : ''}
+        </div>`
+    } else if (s.suggestion_type === 'delete_item') {
+      contentHtml = `
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px">
+          <span style="color:var(--muted)">Elimina:</span>
+          <strong style="color:#A32D2D">${s.content.current_name || '—'}</strong>
+          ${s.content.current_desc ? `<span style="color:var(--muted)">Descrizione attuale:</span><span>${s.content.current_desc}</span>` : ''}
+          <span style="color:var(--muted)">Motivazione:</span>
+          <em>${s.content.reason || '—'}</em>
+        </div>`
     } else if (s.suggestion_type === 'change_coverage') {
-      contentHtml = `Copertura proposta: <strong>${COV_LABELS[s.content.new_coverage]}</strong><br>${s.content.reason}`
+      const covColors = { full:'#3B6D11', partial:'#854F0B', gap:'#A32D2D' }
+      const currentCov = cell?.coverage || '—'
+      contentHtml = `
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px">
+          <span style="color:var(--muted)">Copertura attuale:</span>
+          <span>${COV_LABELS[currentCov] || currentCov}</span>
+          <span style="color:var(--muted)">Proposta:</span>
+          <strong style="color:${covColors[s.content.new_coverage]}">${COV_LABELS[s.content.new_coverage] || s.content.new_coverage}</strong>
+          <span style="color:var(--muted)">Motivazione:</span>
+          <em>${s.content.reason || '—'}</em>
+        </div>`
     } else if (s.suggestion_type === 'change_label') {
-      contentHtml = `Nuovo titolo: <strong>${s.content.new_label}</strong><br>${s.content.reason||''}`
+      contentHtml = `
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px">
+          <span style="color:var(--muted)">Titolo attuale:</span>
+          <span>${cell?.label || '—'}</span>
+          <span style="color:var(--muted)">Proposto:</span>
+          <strong style="color:#3B6D11">${s.content.new_label || '—'}</strong>
+          ${s.content.reason ? `<span style="color:var(--muted)">Motivazione:</span><em>${s.content.reason}</em>` : ''}
+        </div>`
     } else {
-      contentHtml = s.content.note
+      contentHtml = `<span style="font-size:12px">${s.content.note || '—'}</span>`
     }
+
+    // Stato attuale della cella (per context)
+    const cellPreview = cell ? `
+      <div style="margin-top:10px;padding:8px 10px;background:#f5f5f5;
+                  border-radius:var(--radius);font-size:11px;color:var(--muted)">
+        <strong style="color:var(--text)">Stato attuale della cella:</strong>
+        ${cell.items.map(it => `<span style="display:inline-block;margin:3px 4px 0 0;
+          background:white;border:1px solid var(--border);border-radius:4px;
+          padding:2px 6px">${it.n}</span>`).join('')}
+      </div>` : ''
 
     const reviewNote = s.status !== 'pending'
       ? `<div style="margin-top:6px;font-size:11px;color:var(--muted)">
@@ -238,14 +289,17 @@ function renderSuggestions() {
       <div class="sug-card-header">
         <div>
           <div class="sug-card-cell">${cellLabel}</div>
-          <div class="sug-card-type">${typeLabels[s.suggestion_type]}</div>
+          <div class="sug-card-type">${typeLabels[s.suggestion_type] || s.suggestion_type}</div>
         </div>
         <div style="text-align:right">
           <div class="sug-card-by">${s.submitter?.full_name || s.submitter?.email || '—'}</div>
           <div style="font-size:10px;color:var(--muted)">${date}</div>
         </div>
       </div>
-      <div class="sug-card-content">${contentHtml}</div>
+      <div class="sug-card-content">
+        ${contentHtml}
+        ${cellPreview}
+      </div>
       ${reviewNote}
       ${actions}
     </div>`
