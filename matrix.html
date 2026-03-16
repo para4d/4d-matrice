@@ -73,6 +73,8 @@
       <label>Tipo di suggerimento</label>
       <select id="sug-type" onchange="onTypeChange()">
         <option value="add_item">Aggiungi un servizio/prodotto</option>
+        <option value="edit_item">Modifica un servizio/prodotto esistente</option>
+        <option value="delete_item">Elimina un servizio/prodotto</option>
         <option value="change_coverage">Modifica la copertura</option>
         <option value="change_label">Modifica il titolo della cella</option>
         <option value="general_note">Nota generale</option>
@@ -88,6 +90,47 @@
       <div class="form-group">
         <label>Descrizione breve</label>
         <input type="text" id="sug-item-desc" placeholder="es. Backup cloud per PMI con deduplicazione">
+      </div>
+    </div>
+
+    <!-- edit_item fields -->
+    <div id="f-edit_item" class="hidden">
+      <div class="form-group">
+        <label>Seleziona l'elemento da modificare</label>
+        <select id="sug-edit-idx" onchange="onEditItemSelect()">
+          <option value="">— scegli —</option>
+        </select>
+      </div>
+      <div id="edit-item-fields" class="hidden">
+        <p style="font-size:11px;color:var(--muted);margin-bottom:10px">
+          Lascia vuoto un campo per non modificarlo.
+        </p>
+        <div class="form-group">
+          <label>Nuovo nome <span style="color:var(--muted);font-weight:400">(attuale: <span id="edit-current-name"></span>)</span></label>
+          <input type="text" id="sug-edit-name" placeholder="lascia vuoto per non cambiare">
+        </div>
+        <div class="form-group">
+          <label>Nuova descrizione <span style="color:var(--muted);font-weight:400">(attuale: <span id="edit-current-desc"></span>)</span></label>
+          <input type="text" id="sug-edit-desc" placeholder="lascia vuoto per non cambiare">
+        </div>
+        <div class="form-group">
+          <label>Motivazione</label>
+          <textarea id="sug-edit-reason" placeholder="Perché proponi questa modifica?"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- delete_item fields -->
+    <div id="f-delete_item" class="hidden">
+      <div class="form-group">
+        <label>Seleziona l'elemento da eliminare</label>
+        <select id="sug-delete-idx">
+          <option value="">— scegli —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Motivazione</label>
+        <textarea id="sug-delete-reason" placeholder="Perché proponi di eliminare questo elemento?"></textarea>
       </div>
     </div>
 
@@ -274,6 +317,16 @@ function openSuggestModal() {
   const actIdx = parseInt(currentCell.split('-')[1])
   document.getElementById('modal-cell-desc').textContent =
     `Cella: ${sector.label} × ${ACTIVITIES[actIdx]} — "${cell.label}"`
+
+  // Popola i dropdown degli elementi esistenti
+  const items = cell.items || []
+  const makeOptions = () => `<option value="">— scegli —</option>` +
+    items.map((it, i) => `<option value="${i}">${it.n}${it.d ? ' — ' + it.d : ''}</option>`).join('')
+
+  document.getElementById('sug-edit-idx').innerHTML = makeOptions()
+  document.getElementById('sug-delete-idx').innerHTML = makeOptions()
+  document.getElementById('edit-item-fields').classList.add('hidden')
+
   document.getElementById('suggest-modal').classList.remove('hidden')
 }
 
@@ -288,19 +341,39 @@ function closeModalOnOverlay(e) {
 
 function onTypeChange() {
   const t = document.getElementById('sug-type').value
-  ;['add_item','change_coverage','change_label','general_note'].forEach(type => {
+  ;['add_item','edit_item','delete_item','change_coverage','change_label','general_note'].forEach(type => {
     document.getElementById('f-' + type).classList.toggle('hidden', type !== t)
   })
+}
+
+function onEditItemSelect() {
+  const idx = document.getElementById('sug-edit-idx').value
+  const fieldsDiv = document.getElementById('edit-item-fields')
+  if (idx === '') { fieldsDiv.classList.add('hidden'); return }
+
+  const item = (cells[currentCell]?.items || [])[parseInt(idx)]
+  if (!item) return
+  document.getElementById('edit-current-name').textContent = item.n || '—'
+  document.getElementById('edit-current-desc').textContent = item.d || '—'
+  document.getElementById('sug-edit-name').value = ''
+  document.getElementById('sug-edit-desc').value = ''
+  document.getElementById('sug-edit-reason').value = ''
+  fieldsDiv.classList.remove('hidden')
 }
 
 function resetModal() {
   document.getElementById('sug-type').value = 'add_item'
   onTypeChange()
-  ;['sug-item-name','sug-item-desc','sug-cov-reason','sug-label-new','sug-label-reason','sug-note'].forEach(id => {
+  ;['sug-item-name','sug-item-desc','sug-cov-reason','sug-label-new',
+    'sug-label-reason','sug-note','sug-edit-reason','sug-delete-reason',
+    'sug-edit-name','sug-edit-desc'].forEach(id => {
     const el = document.getElementById(id)
     if (el) el.value = ''
   })
   document.getElementById('sug-cov').value = 'full'
+  document.getElementById('sug-edit-idx').value = ''
+  document.getElementById('sug-delete-idx').value = ''
+  document.getElementById('edit-item-fields').classList.add('hidden')
 }
 
 async function submitSuggestion() {
@@ -312,16 +385,49 @@ async function submitSuggestion() {
     const desc = document.getElementById('sug-item-desc').value.trim()
     if (!name) return toast('Inserisci almeno il nome del servizio.', 'error')
     content = { name, description: desc }
+
+  } else if (type === 'edit_item') {
+    const idx    = document.getElementById('sug-edit-idx').value
+    const reason = document.getElementById('sug-edit-reason').value.trim()
+    if (idx === '') return toast('Seleziona l\'elemento da modificare.', 'error')
+    const newName = document.getElementById('sug-edit-name').value.trim()
+    const newDesc = document.getElementById('sug-edit-desc').value.trim()
+    if (!newName && !newDesc) return toast('Inserisci almeno un campo da modificare.', 'error')
+    const currentItem = cells[currentCell]?.items?.[parseInt(idx)] || {}
+    content = {
+      item_index:   parseInt(idx),
+      current_name: currentItem.n,
+      current_desc: currentItem.d,
+      new_name:     newName  || null,
+      new_desc:     newDesc  || null,
+      reason
+    }
+
+  } else if (type === 'delete_item') {
+    const idx    = document.getElementById('sug-delete-idx').value
+    const reason = document.getElementById('sug-delete-reason').value.trim()
+    if (idx === '') return toast('Seleziona l\'elemento da eliminare.', 'error')
+    if (!reason)    return toast('Inserisci una motivazione.', 'error')
+    const currentItem = cells[currentCell]?.items?.[parseInt(idx)] || {}
+    content = {
+      item_index:   parseInt(idx),
+      current_name: currentItem.n,
+      current_desc: currentItem.d,
+      reason
+    }
+
   } else if (type === 'change_coverage') {
-    const cov = document.getElementById('sug-cov').value
+    const cov    = document.getElementById('sug-cov').value
     const reason = document.getElementById('sug-cov-reason').value.trim()
     if (!reason) return toast('Inserisci una motivazione.', 'error')
     content = { new_coverage: cov, reason }
+
   } else if (type === 'change_label') {
-    const label = document.getElementById('sug-label-new').value.trim()
+    const label  = document.getElementById('sug-label-new').value.trim()
     const reason = document.getElementById('sug-label-reason').value.trim()
     if (!label) return toast('Inserisci il nuovo titolo.', 'error')
     content = { new_label: label, reason }
+
   } else {
     const note = document.getElementById('sug-note').value.trim()
     if (!note) return toast('Scrivi la tua nota.', 'error')
@@ -339,7 +445,6 @@ async function submitSuggestion() {
   })
 
   btn.disabled = false; btn.textContent = 'Invia suggerimento'
-
   if (error) return toast('Errore: ' + error.message, 'error')
   closeSuggestModal()
   toast('Suggerimento inviato! Un admin lo revisionerà presto.', 'success')
@@ -366,11 +471,18 @@ async function loadMySuggestions() {
     const sector = SECTORS.find(sec => s.cell_id.startsWith(sec.id))
     const actIdx = parseInt(s.cell_id.split('-')[1])
     const cellLabel = cell ? `${sector?.label} × ${ACTIVITIES[actIdx]}` : s.cell_id
-    const typeLabels = {add_item:'Aggiungi servizio',change_coverage:'Cambia copertura',
-                        change_label:'Cambia titolo',general_note:'Nota'}
-    const contentStr = s.suggestion_type === 'add_item'
-      ? s.content.name + (s.content.description ? ' — ' + s.content.description : '')
-      : s.suggestion_type === 'general_note' ? s.content.note
+    const typeLabels = {add_item:'Aggiungi servizio', edit_item:'Modifica servizio',
+                        delete_item:'Elimina servizio', change_coverage:'Cambia copertura',
+                        change_label:'Cambia titolo', general_note:'Nota'}
+    const contentStr =
+      s.suggestion_type === 'add_item'
+        ? s.content.name + (s.content.description ? ' — ' + s.content.description : '')
+      : s.suggestion_type === 'edit_item'
+        ? `"${s.content.current_name}" → ${s.content.new_name || s.content.current_name}${s.content.new_desc ? ' / ' + s.content.new_desc : ''}`
+      : s.suggestion_type === 'delete_item'
+        ? `Elimina: "${s.content.current_name}"`
+      : s.suggestion_type === 'general_note'
+        ? s.content.note
       : JSON.stringify(s.content)
     return `<tr>
       <td>${cellLabel}</td>

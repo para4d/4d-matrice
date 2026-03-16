@@ -204,7 +204,8 @@ function renderSuggestions() {
     const sector = SECTORS.find(sec => s.cell_id?.startsWith(sec.id))
     const actIdx = parseInt(s.cell_id?.split('-')[1])
     const cellLabel = cell ? `${sector?.label} × ${ACTIVITIES[actIdx]} — "${cell.label}"` : s.cell_id
-    const typeLabels = { add_item:'Aggiungi servizio', change_coverage:'Cambia copertura',
+    const typeLabels = { add_item:'Aggiungi servizio', edit_item:'Modifica servizio',
+                         delete_item:'Elimina servizio', change_coverage:'Cambia copertura',
                          change_label:'Cambia titolo', general_note:'Nota' }
     const date = new Date(s.created_at).toLocaleDateString('it-IT')
 
@@ -273,10 +274,34 @@ async function reviewSuggestion(sugId, status) {
       await sb.from('matrix_cells').update({ items: newItems, updated_at: new Date().toISOString(),
         updated_by: user.id }).eq('id', sug.cell_id)
       cells[sug.cell_id].items = newItems
+
+    } else if (sug.suggestion_type === 'edit_item') {
+      const idx = sug.content.item_index
+      const newItems = cell.items.map((it, i) => {
+        if (i !== idx) return it
+        return {
+          n: sug.content.new_name  || it.n,
+          d: sug.content.new_desc  !== null && sug.content.new_desc !== undefined
+             ? (sug.content.new_desc || it.d)
+             : it.d
+        }
+      })
+      await sb.from('matrix_cells').update({ items: newItems, updated_at: new Date().toISOString(),
+        updated_by: user.id }).eq('id', sug.cell_id)
+      cells[sug.cell_id].items = newItems
+
+    } else if (sug.suggestion_type === 'delete_item') {
+      const idx = sug.content.item_index
+      const newItems = cell.items.filter((_, i) => i !== idx)
+      await sb.from('matrix_cells').update({ items: newItems, updated_at: new Date().toISOString(),
+        updated_by: user.id }).eq('id', sug.cell_id)
+      cells[sug.cell_id].items = newItems
+
     } else if (sug.suggestion_type === 'change_coverage') {
       await sb.from('matrix_cells').update({ coverage: sug.content.new_coverage,
         updated_at: new Date().toISOString(), updated_by: user.id }).eq('id', sug.cell_id)
       cells[sug.cell_id].coverage = sug.content.new_coverage
+
     } else if (sug.suggestion_type === 'change_label') {
       await sb.from('matrix_cells').update({ label: sug.content.new_label,
         updated_at: new Date().toISOString(), updated_by: user.id }).eq('id', sug.cell_id)
@@ -589,6 +614,13 @@ function buildDetailHtml(e) {
     let contentDesc = ''
     if (stype === 'add_item')
       contentDesc = `<strong>${content.name || ''}</strong>${content.description ? ' — ' + content.description : ''}`
+    else if (stype === 'edit_item')
+      contentDesc = `"${content.current_name}" → <strong>${content.new_name || content.current_name}</strong>
+                     ${content.new_desc ? ' / ' + content.new_desc : ''}
+                     ${content.reason ? '<br><em>' + content.reason + '</em>' : ''}`
+    else if (stype === 'delete_item')
+      contentDesc = `Elimina: <strong>"${content.current_name}"</strong>
+                     ${content.reason ? '<br><em>' + content.reason + '</em>' : ''}`
     else if (stype === 'change_coverage')
       contentDesc = `Nuova copertura: <strong>${content.new_coverage || ''}</strong> · ${content.reason || ''}`
     else if (stype === 'change_label')
