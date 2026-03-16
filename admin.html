@@ -429,7 +429,8 @@ const ACTION_LABELS = {
   suggestion_approved:   'Suggerimento approvato',
   suggestion_rejected:   'Suggerimento rifiutato',
   role_changed:          'Ruolo cambiato',
-  user_login:            'Accesso utente',
+  rollback:              'Rollback',
+  user_login:            'Accesso',
 }
 const ACTION_COLORS = {
   cell_updated:          '#185FA5',
@@ -437,11 +438,16 @@ const ACTION_COLORS = {
   suggestion_approved:   '#3B6D11',
   suggestion_rejected:   '#A32D2D',
   role_changed:          '#3C3489',
-  user_login:            '#555',
+  rollback:              '#555',
+  user_login:            '#888',
 }
 
+// Campi su cui il rollback è supportato
+const ROLLBACKABLE_ACTIONS = ['cell_updated', 'role_changed']
+const ROLLBACKABLE_FIELDS  = ['label', 'coverage', 'items', 'role']
+
 async function loadLog(reset = true) {
-  if (reset) { logOffset = 0 }
+  if (reset) logOffset = 0
 
   let query = sb.from('audit_log')
     .select('*')
@@ -453,26 +459,24 @@ async function loadLog(reset = true) {
   const { data, error } = await query
   if (error) return toast('Errore log: ' + error.message, 'error')
 
-  if (reset) {
-    renderLog(data || [], false)
-  } else {
-    renderLog(data || [], true)
-  }
+  if (reset) renderLog(data || [], false)
+  else       renderLog(data || [], true)
 
   document.getElementById('log-load-more').classList.toggle(
     'hidden', !data || data.length < LOG_PAGE
   )
 
-  // Mostra dimensione log
-  const { data: sizeData } = await sb.rpc('get_log_size')
-  if (sizeData) {
-    const mb = (sizeData / (1024*1024)).toFixed(2)
-    const pct = Math.min(100, Math.round(sizeData / (50*1024*1024) * 100))
-    const color = pct > 80 ? '#A32D2D' : pct > 50 ? '#854F0B' : '#3B6D11'
+  // Barra dimensione
+  const { data: sizeBytes } = await sb.rpc('get_log_size')
+  if (sizeBytes != null) {
+    const mb  = (sizeBytes / (1024*1024)).toFixed(2)
+    const pct = Math.min(100, Math.round(sizeBytes / (50*1024*1024) * 100))
+    const col = pct > 80 ? '#A32D2D' : pct > 50 ? '#854F0B' : '#3B6D11'
     document.getElementById('log-size-badge').innerHTML =
-      `Dimensione log: <strong style="color:${color}">${mb} MB</strong> / 50 MB
-       <span style="display:inline-block;width:80px;height:6px;background:#eee;border-radius:3px;margin-left:6px;vertical-align:middle">
-         <span style="display:block;width:${pct}%;height:100%;background:${color};border-radius:3px"></span>
+      `Dimensione log: <strong style="color:${col}">${mb} MB</strong> / 50 MB
+       <span style="display:inline-block;width:80px;height:6px;background:#eee;
+                    border-radius:3px;margin-left:6px;vertical-align:middle">
+         <span style="display:block;width:${pct}%;height:100%;background:${col};border-radius:3px"></span>
        </span>`
   }
 }
@@ -489,49 +493,172 @@ function renderLog(entries, append) {
     const color = ACTION_COLORS[e.action] || '#555'
     const label = ACTION_LABELS[e.action] || e.action
     const date  = new Date(e.ts).toLocaleString('it-IT')
-    const detail = formatDetail(e)
+    const detailHtml = buildDetailHtml(e)
+    const detailId = `log-detail-${e.id}`
+
     return `<tr>
-      <td style="color:var(--muted);font-size:11px;white-space:nowrap">${date}</td>
-      <td style="font-size:12px">${e.actor_email || '—'}</td>
-      <td><span style="font-size:11px;font-weight:600;color:${color};background:${color}18;
-                padding:2px 8px;border-radius:20px">${label}</span></td>
-      <td style="font-size:11px;color:var(--muted);max-width:260px">${detail}</td>
+      <td style="color:var(--muted);font-size:11px;white-space:nowrap;vertical-align:top">${date}</td>
+      <td style="font-size:12px;vertical-align:top">${e.actor_email || '—'}</td>
+      <td style="vertical-align:top">
+        <span style="font-size:11px;font-weight:600;color:${color};
+                     background:${color}18;padding:2px 8px;border-radius:20px">
+          ${label}
+        </span>
+      </td>
+      <td style="font-size:11px;color:var(--muted);vertical-align:top">
+        ${e.target_type || ''} ${e.target_id ? '· ' + e.target_id : ''}
+      </td>
+      <td style="vertical-align:top">
+        <button class="btn btn-secondary btn-sm"
+                onclick="toggleDetail('${detailId}')">
+          Dettaglio
+        </button>
+      </td>
+    </tr>
+    <tr id="${detailId}" style="display:none">
+      <td colspan="5" style="padding:0 0 12px 0">
+        <div style="background:#fafafa;border:1px solid var(--border);
+                    border-radius:var(--radius);padding:12px 16px;margin:4px 0 0 0">
+          ${detailHtml}
+        </div>
+      </td>
     </tr>`
   }).join('')
 
   const tableHtml = `
     <div class="card" style="padding:0;overflow:hidden">
-      <table class="sug-table">
-        <thead><tr><th>Data/ora</th><th>Utente</th><th>Azione</th><th>Dettaglio</th></tr></thead>
-        <tbody>${rows}</tbody>
+      <table class="sug-table" style="table-layout:auto">
+        <thead>
+          <tr>
+            <th>Data/ora</th>
+            <th>Utente</th>
+            <th>Azione</th>
+            <th>Target</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="log-tbody">${rows}</tbody>
       </table>
     </div>`
 
   if (append) {
-    const existing = container.querySelector('tbody')
-    if (existing) { existing.insertAdjacentHTML('beforeend', rows); return }
+    const tbody = document.getElementById('log-tbody')
+    if (tbody) { tbody.insertAdjacentHTML('beforeend', rows); return }
   }
   container.innerHTML = tableHtml
 }
 
-function formatDetail(e) {
+function toggleDetail(id) {
+  const row = document.getElementById(id)
+  if (!row) return
+  row.style.display = row.style.display === 'none' ? 'table-row' : 'none'
+}
+
+function buildDetailHtml(e) {
   const d = e.detail || {}
-  switch (e.action) {
-    case 'cell_updated':
-      return `Cella <strong>${d.cell_id}</strong> — "${d.label}"
-              ${d.coverage_old !== d.coverage_new
-                ? ` · copertura: ${d.coverage_old} → ${d.coverage_new}` : ''}
-              · ${d.items_count} voci`
-    case 'suggestion_submitted':
-      return `Cella <strong>${d.cell_id}</strong> · tipo: ${d.suggestion_type}`
-    case 'suggestion_approved':
-    case 'suggestion_rejected':
-      return `Cella <strong>${d.cell_id}</strong>${d.review_note ? ' · "' + d.review_note + '"' : ''}`
-    case 'role_changed':
-      return `${d.user_email} · ${d.role_old} → <strong>${d.role_new}</strong>`
-    default:
-      return JSON.stringify(d).substring(0, 80)
+
+  // Rollback entry
+  if (e.action === 'rollback') {
+    return `
+      <div style="font-size:12px;margin-bottom:8px">
+        <strong>Rollback del log #${d.original_log_id}</strong>
+        · azione originale: <em>${d.original_action}</em>
+        · eseguito da: <em>${d.original_actor}</em>
+      </div>
+      <table style="font-size:12px;border-collapse:collapse;width:100%">
+        <tr style="background:#f0f0f0">
+          <th style="text-align:left;padding:5px 10px;font-weight:500">Campo</th>
+          <th style="text-align:left;padding:5px 10px;font-weight:500;color:#A32D2D">Valore ripristinato</th>
+        </tr>
+        <tr>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee">${d.field}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee;color:#3B6D11">
+            ${formatFieldValue(d.field, d.restored_to)}
+          </td>
+        </tr>
+      </table>`
   }
+
+  // Entry con diff
+  const diff = d.diff
+  if (!diff || !Array.isArray(diff) || diff.length === 0) {
+    return `<pre style="font-size:11px;color:var(--muted);white-space:pre-wrap">${JSON.stringify(d, null, 2)}</pre>`
+  }
+
+  const canRollback = ROLLBACKABLE_ACTIONS.includes(e.action)
+
+  const rows = diff.map(item => {
+    const field    = item.field || '—'
+    const oldVal   = formatFieldValue(field, item.old)
+    const newVal   = formatFieldValue(field, item.new)
+    const canField = canRollback && ROLLBACKABLE_FIELDS.includes(field)
+
+    return `<tr>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:500">${field}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;color:#A32D2D;max-width:200px;word-break:break-word">${oldVal}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;color:#3B6D11;max-width:200px;word-break:break-word">${newVal}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee">
+        ${canField
+          ? `<button class="btn btn-secondary btn-sm"
+               onclick="confirmRollback(${e.id}, '${field}', '${escapeHtml(oldVal)}')"
+               title="Ripristina '${field}' al valore precedente">
+               ↩ Ripristina
+             </button>`
+          : '<span style="font-size:11px;color:#ccc">—</span>'}
+      </td>
+    </tr>`
+  }).join('')
+
+  return `
+    <table style="font-size:12px;border-collapse:collapse;width:100%">
+      <tr style="background:#f0f0f0">
+        <th style="text-align:left;padding:5px 10px;font-weight:500;min-width:90px">Campo</th>
+        <th style="text-align:left;padding:5px 10px;font-weight:500;color:#A32D2D">Valore precedente</th>
+        <th style="text-align:left;padding:5px 10px;font-weight:500;color:#3B6D11">Valore nuovo</th>
+        <th style="padding:5px 10px;min-width:110px"></th>
+      </tr>
+      ${rows}
+    </table>`
+}
+
+function formatFieldValue(field, val) {
+  if (val === null || val === undefined) return '<em style="color:#ccc">—</em>'
+  if (field === 'items') {
+    if (Array.isArray(val)) return `${val.length} voci`
+    try {
+      const arr = typeof val === 'string' ? JSON.parse(val) : val
+      return Array.isArray(arr) ? `${arr.length} voci` : String(val)
+    } catch { return String(val) }
+  }
+  if (typeof val === 'object') return JSON.stringify(val)
+  return String(val)
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;')
+}
+
+async function confirmRollback(logId, field, oldValDisplay) {
+  const ok = confirm(
+    `Sei sicuro di voler ripristinare il campo "${field}" al valore precedente?\n\n` +
+    `Valore che verrà ripristinato: ${oldValDisplay}\n\n` +
+    `Questa operazione verrà registrata nel log.`
+  )
+  if (!ok) return
+
+  const { data: { user } } = await sb.auth.getUser()
+
+  const { data, error } = await sb.rpc('rollback_audit_entry', {
+    p_log_id:   logId,
+    p_field:    field,
+    p_actor_id: user.id
+  })
+
+  if (error) return toast('Errore rollback: ' + error.message, 'error')
+  if (!data?.ok) return toast('Rollback fallito: ' + (data?.error || 'errore sconosciuto'), 'error')
+
+  toast(`Campo "${field}" ripristinato con successo. Rollback registrato nel log.`, 'success')
+  loadLog(true)
 }
 
 function filterLog(f) {
