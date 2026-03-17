@@ -154,6 +154,10 @@
           <label>Metodo 4D</label>
           <textarea id="ce-metodo" rows="3" placeholder="Metodologia con cui 4D costruisce questa soluzione..."></textarea>
         </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Risultato</label>
+          <textarea id="ce-risultato" rows="3" placeholder="Risultato che otterrà l'azienda nell'adozione di questa soluzione..."></textarea>
+        </div>
         <div class="form-group">
           <label>Tempi</label>
           <textarea id="ce-tempi" rows="3" placeholder="Logica del calcolo dei tempi..."></textarea>
@@ -369,10 +373,10 @@ function renderCatalogoList() {
     const pubBadge = c.published
       ? `<span class="status-badge status-approved">pubblicata</span>`
       : `<span class="status-badge status-pending">bozza</span>`
-    const pct = [c.motivazione,c.contesto,c.impatto,c.metodo,c.tempi,
+    const pct = [c.motivazione,c.contesto,c.impatto,c.metodo,c.risultato,c.tempi,
                  c.costi,c.inizio,c.predisposizione,c.frase_finale]
                 .filter(v => v && v.trim()).length
-    const completeness = Math.round(pct / 9 * 100)
+    const completeness = Math.round(pct / 10 * 100)
     const covColor = completeness === 100 ? '#3B6D11' : completeness > 50 ? '#854F0B' : '#A32D2D'
 
     return `<tr>
@@ -408,7 +412,7 @@ function openCardEditor(cardId) {
   document.getElementById('ce-title').textContent = card ? `Modifica: ${card.item_name}` : 'Nuova scheda'
 
   // Popola campi
-  const fields = ['motivazione','contesto','impatto','metodo','tempi','costi','inizio','predisposizione']
+  const fields = ['motivazione','contesto','impatto','metodo','risultato','tempi','costi','inizio','predisposizione']
   document.getElementById('ce-cell').value          = card?.cell_id    || ''
   document.getElementById('ce-slug').value          = card?.slug       || ''
   document.getElementById('ce-banner').value        = card?.banner_image_url || ''
@@ -461,6 +465,7 @@ async function saveCard() {
     contesto:         document.getElementById('ce-contesto').value.trim(),
     impatto:          document.getElementById('ce-impatto').value.trim(),
     metodo:           document.getElementById('ce-metodo').value.trim(),
+    risultato:        document.getElementById('ce-risultato').value.trim(),
     tempi:            document.getElementById('ce-tempi').value.trim(),
     costi:            document.getElementById('ce-costi').value.trim(),
     inizio:           document.getElementById('ce-inizio').value.trim(),
