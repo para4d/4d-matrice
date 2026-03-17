@@ -20,6 +20,7 @@
 
 <!-- Stats -->
 <div class="stats-row" id="stats-row">
+  <div class="stat-card"><div class="stat-val" id="stat-items">—</div><div class="stat-label">Voci totali in matrice</div></div>
   <div class="stat-card"><div class="stat-val" id="stat-pending">—</div><div class="stat-label">Suggerimenti in attesa</div></div>
   <div class="stat-card"><div class="stat-val" id="stat-total">—</div><div class="stat-label">Suggerimenti totali</div></div>
   <div class="stat-card"><div class="stat-val" id="stat-users">—</div><div class="stat-label">Collaboratori registrati</div></div>
@@ -156,7 +157,11 @@ async function loadData() {
     sb.from('profiles').select('*').order('created_at')
   ])
 
-  if (dbCells) dbCells.forEach(c => cells[c.id] = c)
+  if (dbCells) {
+    dbCells.forEach(c => cells[c.id] = c)
+    const totalItems = dbCells.reduce((sum, c) => sum + (c.items?.length || 0), 0)
+    document.getElementById('stat-items').textContent = totalItems
+  }
   allSuggestions = sugs || []
 
   const pending = allSuggestions.filter(s => s.status === 'pending').length
