@@ -239,6 +239,10 @@
         <div class="section-label">Metodo 4D</div>
         <p class="section-text" id="s-metodo"></p>
       </div>
+      <div class="section section-full">
+        <div class="section-label">Risultato</div>
+        <p class="section-text" id="s-risultato"></p>
+      </div>
       <div class="section">
         <div class="section-label">Tempi</div>
         <p class="section-text" id="s-tempi"></p>
@@ -370,7 +374,7 @@ function renderCard(card) {
   pt.textContent = card.problem_title || 'Che problema risolve?'
 
   // Sections
-  const fields = ['motivazione','contesto','impatto','metodo','tempi','costi','inizio','predisposizione']
+  const fields = ['motivazione','contesto','impatto','metodo','risultato','tempi','costi','inizio','predisposizione']
   fields.forEach(f => {
     const el = document.getElementById('s-' + f)
     if (!el) return
