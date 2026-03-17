@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scheda 4DM</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    /* ── Reset scheda ────────────────────────────────────────── */
+    body { background: #e8e8e8; margin: 0; padding: 0; font-family: 'Georgia', serif; }
+
+    .screen-bar {
+      background: var(--white, #fff);
+      border-bottom: 1px solid #ddd;
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem; height: 52px;
+      position: sticky; top: 0; z-index: 100;
+      font-family: -apple-system, sans-serif;
+    }
+    .screen-bar-left { display: flex; align-items: center; gap: 16px; }
+    .screen-bar a { font-size: 13px; color: #C0392B; text-decoration: none; }
+    .screen-bar a:hover { text-decoration: underline; }
+    .screen-bar-title { font-size: 14px; font-weight: 600; color: #1a1a1a; }
+    .draft-badge {
+      font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px;
+      background: #FFF3CD; color: #856404;
+    }
+
+    .btn-pdf {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #C0392B; color: white; border: none;
+      padding: 8px 18px; border-radius: 6px; font-size: 13px;
+      font-family: -apple-system, sans-serif;
+      font-weight: 500; cursor: pointer;
+    }
+    .btn-pdf:hover { background: #922B21; }
+
+    /* ── A4 page ─────────────────────────────────────────────── */
+    .a4-wrap {
+      width: 210mm;
+      margin: 2rem auto;
+      background: white;
+      box-shadow: 0 4px 32px rgba(0,0,0,.18);
+    }
+
+    /* ── Top banner ──────────────────────────────────────────── */
+    .top-banner {
+      width: 100%;
+      height: 22mm;
+      background: #1A3A6B;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 10mm;
+      box-sizing: border-box;
+    }
+    .top-banner-logo {
+      color: white; font-size: 20pt; font-weight: 700;
+      letter-spacing: .06em; font-family: -apple-system, sans-serif;
+    }
+    .top-banner-tag {
+      color: rgba(255,255,255,.55); font-size: 9pt;
+      font-family: -apple-system, sans-serif; letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    /* ── Content area ────────────────────────────────────────── */
+    .card-body { padding: 10mm 12mm; }
+
+    /* ── Sector pill ─────────────────────────────────────────── */
+    .sector-pill {
+      display: inline-block; font-size: 8pt; font-weight: 700;
+      letter-spacing: .1em; text-transform: uppercase;
+      padding: 3px 10px; border-radius: 20px; margin-bottom: 4mm;
+      font-family: -apple-system, sans-serif;
+    }
+
+    /* ── Title block ─────────────────────────────────────────── */
+    .card-title {
+      font-size: 26pt; font-weight: 700; color: #1A1A1A;
+      line-height: 1.1; margin: 0 0 2mm 0;
+    }
+    .card-subtitle {
+      font-size: 12pt; color: #555; margin: 0 0 6mm 0;
+      line-height: 1.4; font-style: italic;
+    }
+
+    /* ── Image banner ────────────────────────────────────────── */
+    .image-banner {
+      width: 100%; height: 42mm; object-fit: cover;
+      display: block; background: #1A3A6B;
+      position: relative; overflow: hidden;
+    }
+    .image-banner img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .image-banner-placeholder {
+      width: 100%; height: 42mm;
+      background: linear-gradient(135deg, #1A3A6B 0%, #2563a8 60%, #1e4f8f 100%);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .image-banner-placeholder span {
+      color: rgba(255,255,255,.3); font-size: 11pt;
+      font-family: -apple-system, sans-serif; letter-spacing: .05em;
+    }
+
+    /* ── Problem title ───────────────────────────────────────── */
+    .problem-title {
+      font-size: 15pt; font-weight: 700; color: #1A3A6B;
+      margin: 7mm 0 4mm 0; line-height: 1.2;
+      border-left: 4px solid #1A3A6B; padding-left: 4mm;
+    }
+
+    /* ── Section grid ────────────────────────────────────────── */
+    .sections { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm 7mm; margin-bottom: 6mm; }
+    .section-full { grid-column: 1 / -1; }
+
+    .section { }
+    .section-label {
+      font-size: 7.5pt; font-weight: 700; letter-spacing: .12em;
+      text-transform: uppercase; color: #1A3A6B;
+      font-family: -apple-system, sans-serif;
+      border-bottom: 1.5px solid #1A3A6B; padding-bottom: 1mm; margin-bottom: 2mm;
+    }
+    .section-text {
+      font-size: 9.5pt; color: #333; line-height: 1.55;
+      margin: 0;
+    }
+    .section-text.empty { color: #bbb; font-style: italic; }
+
+    /* ── Frase finale ────────────────────────────────────────── */
+    .frase-finale {
+      background: #1A3A6B; color: white;
+      padding: 5mm 10mm; margin: 0 -12mm;
+      font-size: 13pt; font-style: italic;
+      text-align: center; line-height: 1.4;
+    }
+
+    /* ── Contact strip ───────────────────────────────────────── */
+    .contact-strip {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 5mm 0 4mm 0;
+      border-top: 1px solid #ddd; margin-top: 5mm;
+    }
+    .contact-info { font-family: -apple-system, sans-serif; }
+    .contact-name { font-size: 12pt; font-weight: 700; color: #1A3A6B; margin-bottom: 1mm; }
+    .contact-line { font-size: 8.5pt; color: #555; line-height: 1.7; }
+    .contact-line a { color: #1A3A6B; text-decoration: none; }
+
+    .qr-block { text-align: center; }
+    .qr-block #qrcode canvas, .qr-block #qrcode img {
+      width: 22mm !important; height: 22mm !important;
+    }
+    .qr-label { font-size: 7pt; color: #999; margin-top: 1mm; font-family: -apple-system, sans-serif; }
+
+    /* ── Bottom band ─────────────────────────────────────────── */
+    .bottom-band {
+      width: 100%; height: 5mm; background: #1A3A6B;
+    }
+
+    /* ── Loading / error ─────────────────────────────────────── */
+    .loading-wrap {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 60vh; font-family: -apple-system, sans-serif;
+      color: #666; font-size: 14px;
+    }
+
+    /* ── Print styles ────────────────────────────────────────── */
+    @media print {
+      body { background: white; margin: 0; padding: 0; }
+      .screen-bar { display: none !important; }
+      .a4-wrap {
+        width: 210mm; margin: 0; padding: 0;
+        box-shadow: none;
+      }
+      @page { size: A4 portrait; margin: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Screen toolbar (nascosta in stampa) ─────────────────── -->
+<div class="screen-bar">
+  <div class="screen-bar-left">
+    <a href="matrix.html">← Matrice</a>
+    <span class="screen-bar-title" id="bar-title">Scheda 4DM</span>
+    <span class="draft-badge hidden" id="draft-badge">Bozza</span>
+  </div>
+  <button class="btn-pdf" onclick="printPDF()">
+    ↓ Scarica PDF
+  </button>
+</div>
+
+<!-- ── Loading ────────────────────────────────────────────── -->
+<div class="loading-wrap" id="loading">Caricamento scheda...</div>
+
+<!-- ── A4 page ─────────────────────────────────────────────── -->
+<div class="a4-wrap hidden" id="a4-page">
+
+  <!-- Top banner -->
+  <div class="top-banner">
+    <span class="top-banner-logo">4D Sistemi Informatici</span>
+    <span class="top-banner-tag">Catalogo Servizi 4DM</span>
+  </div>
+
+  <div class="card-body">
+
+    <!-- Sector + activity pill -->
+    <div class="sector-pill" id="card-sector-pill"></div>
+
+    <!-- Title + subtitle -->
+    <h1 class="card-title" id="card-title"></h1>
+    <p class="card-subtitle" id="card-subtitle"></p>
+
+    <!-- Image banner -->
+    <div class="image-banner" id="card-image-wrap">
+      <div class="image-banner-placeholder" id="card-image-placeholder">
+        <span>Immagine evocativa</span>
+      </div>
+    </div>
+
+    <!-- Problem title -->
+    <div class="problem-title" id="card-problem-title"></div>
+
+    <!-- Sections 2-col grid -->
+    <div class="sections">
+      <div class="section">
+        <div class="section-label">Motivazione</div>
+        <p class="section-text" id="s-motivazione"></p>
+      </div>
+      <div class="section">
+        <div class="section-label">Contesto</div>
+        <p class="section-text" id="s-contesto"></p>
+      </div>
+      <div class="section section-full">
+        <div class="section-label">Impatto</div>
+        <p class="section-text" id="s-impatto"></p>
+      </div>
+      <div class="section section-full">
+        <div class="section-label">Metodo 4D</div>
+        <p class="section-text" id="s-metodo"></p>
+      </div>
+      <div class="section">
+        <div class="section-label">Tempi</div>
+        <p class="section-text" id="s-tempi"></p>
+      </div>
+      <div class="section">
+        <div class="section-label">Costi</div>
+        <p class="section-text" id="s-costi"></p>
+      </div>
+      <div class="section">
+        <div class="section-label">Come iniziare</div>
+        <p class="section-text" id="s-inizio"></p>
+      </div>
+      <div class="section">
+        <div class="section-label">Predisposizione richiesta</div>
+        <p class="section-text" id="s-predisposizione"></p>
+      </div>
+    </div>
+
+  </div><!-- /card-body -->
+
+  <!-- Frase finale -->
+  <div class="frase-finale" id="card-frase-finale"></div>
+
+  <div class="card-body">
+    <!-- Contact strip -->
+    <div class="contact-strip">
+      <div class="contact-info">
+        <div class="contact-name">4D Sistemi Informatici S.r.l.</div>
+        <div class="contact-line">
+          Via Giacomo Watt, 32 — 20143 Milano<br>
+          <a href="tel:+390255184100">+39 02 5518 4100</a> ·
+          <a href="mailto:info@4dsistemi.it">info@4dsistemi.it</a><br>
+          <a href="https://www.4dsistemi.it">www.4dsistemi.it</a>
+        </div>
+      </div>
+      <div class="qr-block">
+        <div id="qrcode"></div>
+        <div class="qr-label">Scheda online</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom band -->
+  <div class="bottom-band"></div>
+
+</div><!-- /a4-page -->
+
+<script src="js/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
+const SECTOR_COLORS = {
+  sec: { color:'#A32D2D', bg:'#FCEBEB', label:'Security' },
+  con: { color:'#0F6E56', bg:'#E1F5EE', label:'Continuity' },
+  wor: { color:'#185FA5', bg:'#E6F1FB', label:'Workplace' },
+  inf: { color:'#854F0B', bg:'#FAEEDA', label:'Infrastructure' },
+  man: { color:'#3C3489', bg:'#EEEDFE', label:'Management' },
+}
+const ACTIVITIES = ['Consulenza','Progettazione','Fornitura','Installazione','Manutenzione']
+
+async function init() {
+  // Auth check
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return window.location.href = 'index.html'
+
+  // Leggi ID o slug dalla querystring: ?id=UUID oppure ?slug=watchguard-firewall
+  const params = new URLSearchParams(window.location.search)
+  const cardId = params.get('id')
+  const slug   = params.get('slug')
+
+  if (!cardId && !slug) {
+    document.getElementById('loading').textContent = 'Nessuna scheda specificata.'
+    return
+  }
+
+  let query = sb.from('catalog_cards').select('*')
+  if (cardId) query = query.eq('id', cardId)
+  else        query = query.eq('slug', slug)
+
+  const { data: card, error } = await query.single()
+
+  if (error || !card) {
+    document.getElementById('loading').textContent = 'Scheda non trovata.'
+    return
+  }
+
+  // Controlla ruolo per bozze
+  const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
+  if (!card.published && profile?.role !== 'admin') {
+    document.getElementById('loading').textContent = 'Scheda non ancora pubblicata.'
+    return
+  }
+
+  renderCard(card)
+}
+
+function renderCard(card) {
+  // Sector info
+  const sectorId = card.cell_id?.split('-')[0]
+  const actIdx   = parseInt(card.cell_id?.split('-')[1])
+  const sector   = SECTOR_COLORS[sectorId] || { color:'#333', bg:'#eee', label:'4D' }
+  const actLabel = ACTIVITIES[actIdx] ?? ''
+
+  // Toolbar
+  document.getElementById('bar-title').textContent = card.item_name
+  document.title = card.item_name + ' — 4DM'
+  if (!card.published) document.getElementById('draft-badge').classList.remove('hidden')
+
+  // Sector pill
+  const pill = document.getElementById('card-sector-pill')
+  pill.textContent = `${sector.label}  ·  ${actLabel}`
+  pill.style.background = sector.bg
+  pill.style.color = sector.color
+
+  // Title / subtitle
+  document.getElementById('card-title').textContent = card.item_name
+  document.getElementById('card-subtitle').textContent =
+    card.problem_title ? '' : '— scheda in preparazione —'
+
+  // Image banner
+  if (card.banner_image_url) {
+    const wrap = document.getElementById('card-image-wrap')
+    wrap.innerHTML = `<img src="${card.banner_image_url}" alt="${card.item_name}">`
+  }
+
+  // Problem title
+  const pt = document.getElementById('card-problem-title')
+  pt.textContent = card.problem_title || 'Che problema risolve?'
+
+  // Sections
+  const fields = ['motivazione','contesto','impatto','metodo','tempi','costi','inizio','predisposizione']
+  fields.forEach(f => {
+    const el = document.getElementById('s-' + f)
+    if (!el) return
+    const val = card[f]
+    if (val) {
+      el.textContent = val
+    } else {
+      el.textContent = 'Da compilare.'
+      el.classList.add('empty')
+    }
+  })
+
+  // Frase finale
+  const ff = document.getElementById('card-frase-finale')
+  ff.textContent = card.frase_finale || 'Quanto ti costa ogni giorno che aspetti?'
+
+  // QR code — punta alla pagina scheda online
+  const pageUrl = card.slug
+    ? `${window.location.origin}/scheda.html?slug=${card.slug}`
+    : `${window.location.origin}/scheda.html?id=${card.id}`
+
+  new QRCode(document.getElementById('qrcode'), {
+    text: pageUrl, width: 84, height: 84,
+    colorDark: '#1A3A6B', colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  })
+
+  // Show page
+  document.getElementById('loading').classList.add('hidden')
+  document.getElementById('a4-page').classList.remove('hidden')
+}
+
+function printPDF() {
+  window.print()
+}
+
+init()
+</script>
+</body>
+</html>

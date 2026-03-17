@@ -196,10 +196,11 @@ const ACTIVITIES = ['Consulenza','Progettazione','Fornitura / Produzione','Insta
 const COV_COLORS = { full:'var(--full)', partial:'var(--partial)', gap:'var(--gap)' }
 const COV_LABELS = { full:'Copertura piena', partial:'Copertura parziale', gap:'Gap' }
 
-let cells = {}       // keyed by cell id
+let cells = {}
 let currentCell = null
 let currentUser = null
 let currentProfile = null
+let cardIndex = {}   // chiave: "cell_id:item_index" → card id
 
 async function init() {
   const { data: { session } } = await sb.auth.getSession()
@@ -221,6 +222,11 @@ async function init() {
   // load matrix cells
   const { data: dbCells } = await sb.from('matrix_cells').select('*')
   if (dbCells) dbCells.forEach(c => cells[c.id] = c)
+
+  // load catalog cards index
+  const { data: dbCards } = await sb.from('catalog_cards')
+    .select('id, cell_id, item_index').eq('published', true)
+  if (dbCards) dbCards.forEach(c => { cardIndex[`${c.cell_id}:${c.item_index}`] = c.id })
 
   renderMatrix()
   loadMySuggestions()
@@ -291,12 +297,21 @@ function showDetail(id) {
   cov.style.background = cell.coverage==='full'?'#EAF3DE':cell.coverage==='partial'?'#FFF3CD':'#FCEBEB'
   cov.style.color = cell.coverage==='full'?'#3B6D11':cell.coverage==='partial'?'#856404':'#A32D2D'
 
-  document.getElementById('d-items').innerHTML = cell.items.map(it =>
-    `<div class="item-card">
+  document.getElementById('d-items').innerHTML = cell.items.map((it, idx) => {
+    const cardKey = `${id}:${idx}`
+    const cardLink = cardIndex[cardKey]
+      ? `<a href="scheda.html?id=${cardIndex[cardKey]}" target="_blank"
+           style="font-size:10px;color:#185FA5;text-decoration:none;
+                  display:inline-block;margin-top:4px">
+           📄 Scheda 4DM
+         </a>`
+      : ''
+    return `<div class="item-card">
       <div class="item-name">${it.n}</div>
       <div class="item-desc">${it.d}</div>
+      ${cardLink}
     </div>`
-  ).join('')
+  }).join('')
 
   document.getElementById('detail-panel').classList.remove('hidden')
   document.getElementById('detail-panel').scrollIntoView({ behavior:'smooth', block:'nearest' })

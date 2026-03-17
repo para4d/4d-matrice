@@ -33,6 +33,7 @@
     <button class="tab-btn active" onclick="switchTab('suggestions')">Suggerimenti <span id="pending-badge"></span></button>
     <button class="tab-btn" onclick="switchTab('users')">Gestione utenti</button>
     <button class="tab-btn" onclick="switchTab('matrix')">Modifica matrice</button>
+    <button class="tab-btn" onclick="switchTab('catalogo')">Catalogo 4DM</button>
     <button class="tab-btn" onclick="switchTab('log')">Log attività</button>
   </div>
 
@@ -89,6 +90,109 @@
         <thead id="admin-matrix-head"></thead>
         <tbody id="admin-matrix-body"></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- TAB: Catalogo 4DM -->
+  <div id="tab-catalogo" class="hidden">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <p style="font-size:13px;color:var(--muted);margin:0">
+        Ogni voce della matrice può avere una scheda esplicativa nel catalogo 4DM.
+      </p>
+      <button class="btn btn-primary btn-sm" onclick="openCardEditor(null)">+ Nuova scheda</button>
+    </div>
+
+    <!-- Editor scheda (nascosto di default) -->
+    <div id="card-editor" class="card hidden" style="margin-bottom:1.5rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <span class="page-title" style="font-size:15px" id="ce-title">Nuova scheda</span>
+        <button class="btn btn-secondary btn-sm" onclick="closeCardEditor()">✕ Chiudi</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group">
+          <label>Cella della matrice</label>
+          <select id="ce-cell">
+            <option value="">— seleziona —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Voce (elemento)</label>
+          <select id="ce-item" onchange="onCeItemChange()">
+            <option value="">— seleziona prima la cella —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Slug URL <span style="color:var(--muted);font-weight:400">(es. watchguard-firewall)</span></label>
+          <input type="text" id="ce-slug" placeholder="slug-url-amichevole">
+        </div>
+        <div class="form-group">
+          <label>URL immagine banner</label>
+          <input type="text" id="ce-banner" placeholder="https://...">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Titolo paragrafo problema <span style="color:var(--muted);font-weight:400">(risponde a: che problema risolve?)</span></label>
+        <input type="text" id="ce-problem-title" placeholder="es. Come proteggere la rete aziendale dalle minacce esterne">
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group">
+          <label>Motivazione</label>
+          <textarea id="ce-motivazione" rows="4" placeholder="La voce risolve il problema perché..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Contesto</label>
+          <textarea id="ce-contesto" rows="4" placeholder="Dimensioni aziendali o settori più sensibili..."></textarea>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Impatto</label>
+          <textarea id="ce-impatto" rows="3" placeholder="Ruoli e processi impattati..."></textarea>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Metodo 4D</label>
+          <textarea id="ce-metodo" rows="3" placeholder="Metodologia con cui 4D costruisce questa soluzione..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Tempi</label>
+          <textarea id="ce-tempi" rows="3" placeholder="Logica del calcolo dei tempi..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Costi</label>
+          <textarea id="ce-costi" rows="3" placeholder="Elementi che contribuiscono al costo..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Come iniziare</label>
+          <textarea id="ce-inizio" rows="3" placeholder="Prossimo passo concreto..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Predisposizione richiesta</label>
+          <textarea id="ce-predisposizione" rows="3" placeholder="Cosa viene richiesto all'azienda..."></textarea>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Frase motivazionale conclusiva</label>
+        <input type="text" id="ce-frase" placeholder="es. Quanto ti costa ogni giorno che aspetti?">
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="ce-published"> Pubblica scheda (visibile a tutti)
+        </label>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:1rem">
+        <button class="btn btn-primary" onclick="saveCard()">Salva scheda</button>
+        <button id="ce-preview-btn" class="btn btn-secondary hidden"
+                onclick="previewCard()">Anteprima ↗</button>
+      </div>
+    </div>
+
+    <!-- Lista schede -->
+    <div id="catalogo-list">
+      <p style="color:var(--muted);font-size:13px">Caricamento...</p>
     </div>
   </div>
 
@@ -178,13 +282,205 @@ async function loadData() {
 // ── Tab switching ─────────────────────────────────────────────
 
 function switchTab(t) {
-  ;['suggestions','users','matrix','log'].forEach(id => {
+  ;['suggestions','users','matrix','catalogo','log'].forEach(id => {
     document.getElementById('tab-' + id).classList.toggle('hidden', id !== t)
   })
   document.querySelectorAll('.tab-btn').forEach((b,i) => {
-    b.classList.toggle('active', ['suggestions','users','matrix','log'][i] === t)
+    b.classList.toggle('active', ['suggestions','users','matrix','catalogo','log'][i] === t)
   })
-  if (t === 'log') loadLog()
+  if (t === 'log')      loadLog()
+  if (t === 'catalogo') loadCatalogo()
+}
+
+// ── Catalogo 4DM ──────────────────────────────────────────────
+
+let editingCardId = null
+let allCards = []
+
+async function loadCatalogo() {
+  const { data } = await sb.from('catalog_cards').select('*').order('created_at', { ascending: false })
+  allCards = data || []
+  renderCatalogoList()
+  populateCellSelect()
+}
+
+function populateCellSelect() {
+  const sel = document.getElementById('ce-cell')
+  const SECTORS = [
+    { id:'sec', label:'Security' }, { id:'con', label:'Continuity' },
+    { id:'wor', label:'Workplace' }, { id:'inf', label:'Infrastructure' },
+    { id:'man', label:'Management' }
+  ]
+  const ACTIVITIES = ['Consulenza','Progettazione','Fornitura','Installazione','Manutenzione']
+  let opts = '<option value="">— seleziona —</option>'
+  SECTORS.forEach(s => {
+    for (let i = 0; i < 5; i++) {
+      const id   = `${s.id}-${i}`
+      const cell = cells[id]
+      if (!cell) continue
+      opts += `<option value="${id}">${s.label} × ${ACTIVITIES[i]} — ${cell.label}</option>`
+    }
+  })
+  sel.innerHTML = opts
+  sel.onchange = onCeCellChange
+}
+
+function onCeCellChange() {
+  const cellId = document.getElementById('ce-cell').value
+  const cell   = cells[cellId]
+  const itemSel = document.getElementById('ce-item')
+  if (!cell) { itemSel.innerHTML = '<option value="">— seleziona prima la cella —</option>'; return }
+  itemSel.innerHTML = '<option value="">— scegli voce —</option>' +
+    cell.items.map((it, i) => `<option value="${i}">${it.n}</option>`).join('')
+}
+
+function onCeItemChange() {
+  const cellId = document.getElementById('ce-cell').value
+  const idx    = document.getElementById('ce-item').value
+  if (!cellId || idx === '') return
+  const item = cells[cellId]?.items?.[parseInt(idx)]
+  if (!item) return
+  // Auto-slug if empty
+  const slugEl = document.getElementById('ce-slug')
+  if (!slugEl.value) {
+    slugEl.value = item.n.toLowerCase()
+      .replace(/[àáâãäå]/g,'a').replace(/[èéêë]/g,'e')
+      .replace(/[ìíîï]/g,'i').replace(/[òóôõö]/g,'o')
+      .replace(/[ùúûü]/g,'u').replace(/[^a-z0-9]+/g,'-')
+      .replace(/^-+|-+$/g,'')
+  }
+}
+
+function renderCatalogoList() {
+  const SECTORS_L = { sec:'Security', con:'Continuity', wor:'Workplace', inf:'Infrastructure', man:'Management' }
+  const ACTIVITIES = ['Consulenza','Progettazione','Fornitura','Installazione','Manutenzione']
+
+  if (allCards.length === 0) {
+    document.getElementById('catalogo-list').innerHTML =
+      '<p style="color:var(--muted);font-size:13px">Nessuna scheda creata. Clicca "+ Nuova scheda" per iniziare.</p>'
+    return
+  }
+
+  const rows = allCards.map(c => {
+    const sId = c.cell_id?.split('-')[0]
+    const aIdx = parseInt(c.cell_id?.split('-')[1])
+    const sLabel = SECTORS_L[sId] || '—'
+    const aLabel = ACTIVITIES[aIdx] || '—'
+    const pubBadge = c.published
+      ? `<span class="status-badge status-approved">pubblicata</span>`
+      : `<span class="status-badge status-pending">bozza</span>`
+    const pct = [c.motivazione,c.contesto,c.impatto,c.metodo,c.tempi,
+                 c.costi,c.inizio,c.predisposizione,c.frase_finale]
+                .filter(v => v && v.trim()).length
+    const completeness = Math.round(pct / 9 * 100)
+    const covColor = completeness === 100 ? '#3B6D11' : completeness > 50 ? '#854F0B' : '#A32D2D'
+
+    return `<tr>
+      <td style="font-weight:500">${c.item_name}</td>
+      <td style="font-size:12px;color:var(--muted)">${sLabel} × ${aLabel}</td>
+      <td>${pubBadge}</td>
+      <td>
+        <span style="font-size:12px;font-weight:600;color:${covColor}">${completeness}%</span>
+        <span style="font-size:11px;color:var(--muted)"> compilata</span>
+      </td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-secondary btn-sm" onclick="openCardEditor('${c.id}')">Modifica</button>
+          <a class="btn btn-secondary btn-sm" href="scheda.html?id=${c.id}" target="_blank">Anteprima</a>
+        </div>
+      </td>
+    </tr>`
+  }).join('')
+
+  document.getElementById('catalogo-list').innerHTML = `
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="users-table">
+        <thead><tr><th>Voce</th><th>Settore × Attività</th><th>Stato</th><th>Completamento</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`
+}
+
+function openCardEditor(cardId) {
+  editingCardId = cardId
+  const card = cardId ? allCards.find(c => c.id === cardId) : null
+
+  document.getElementById('ce-title').textContent = card ? `Modifica: ${card.item_name}` : 'Nuova scheda'
+
+  // Popola campi
+  const fields = ['motivazione','contesto','impatto','metodo','tempi','costi','inizio','predisposizione']
+  document.getElementById('ce-cell').value          = card?.cell_id    || ''
+  document.getElementById('ce-slug').value          = card?.slug       || ''
+  document.getElementById('ce-banner').value        = card?.banner_image_url || ''
+  document.getElementById('ce-problem-title').value = card?.problem_title   || ''
+  document.getElementById('ce-frase').value         = card?.frase_finale    || ''
+  document.getElementById('ce-published').checked   = card?.published       || false
+  fields.forEach(f => {
+    const el = document.getElementById('ce-' + f)
+    if (el) el.value = card?.[f] || ''
+  })
+
+  if (card?.cell_id) {
+    onCeCellChange()
+    document.getElementById('ce-item').value = card.item_index ?? ''
+  }
+
+  document.getElementById('ce-preview-btn').classList.toggle('hidden', !cardId)
+  document.getElementById('card-editor').classList.remove('hidden')
+  document.getElementById('card-editor').scrollIntoView({ behavior:'smooth', block:'start' })
+}
+
+function closeCardEditor() {
+  document.getElementById('card-editor').classList.add('hidden')
+  editingCardId = null
+}
+
+function previewCard() {
+  if (!editingCardId) return
+  window.open(`scheda.html?id=${editingCardId}`, '_blank')
+}
+
+async function saveCard() {
+  const { data: { user } } = await sb.auth.getUser()
+  const cellId  = document.getElementById('ce-cell').value
+  const itemIdx = document.getElementById('ce-item').value
+  if (!cellId)         return toast('Seleziona una cella.', 'error')
+  if (itemIdx === '')  return toast('Seleziona una voce.', 'error')
+
+  const item = cells[cellId]?.items?.[parseInt(itemIdx)]
+  if (!item) return toast('Voce non trovata.', 'error')
+
+  const payload = {
+    cell_id:          cellId,
+    item_index:       parseInt(itemIdx),
+    item_name:        item.n,
+    slug:             document.getElementById('ce-slug').value.trim() || null,
+    banner_image_url: document.getElementById('ce-banner').value.trim() || null,
+    problem_title:    document.getElementById('ce-problem-title').value.trim(),
+    motivazione:      document.getElementById('ce-motivazione').value.trim(),
+    contesto:         document.getElementById('ce-contesto').value.trim(),
+    impatto:          document.getElementById('ce-impatto').value.trim(),
+    metodo:           document.getElementById('ce-metodo').value.trim(),
+    tempi:            document.getElementById('ce-tempi').value.trim(),
+    costi:            document.getElementById('ce-costi').value.trim(),
+    inizio:           document.getElementById('ce-inizio').value.trim(),
+    predisposizione:  document.getElementById('ce-predisposizione').value.trim(),
+    frase_finale:     document.getElementById('ce-frase').value.trim(),
+    published:        document.getElementById('ce-published').checked,
+    updated_by:       user.id,
+  }
+
+  let error
+  if (editingCardId) {
+    ({ error } = await sb.from('catalog_cards').update(payload).eq('id', editingCardId))
+  } else {
+    ({ error } = await sb.from('catalog_cards').insert(payload))
+  }
+
+  if (error) return toast('Errore: ' + error.message, 'error')
+  toast(editingCardId ? 'Scheda aggiornata!' : 'Scheda creata!', 'success')
+  closeCardEditor()
+  loadCatalogo()
 }
 
 // ── Suggestions ───────────────────────────────────────────────
