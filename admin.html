@@ -99,7 +99,18 @@
       <p style="font-size:13px;color:var(--muted);margin:0">
         Ogni voce della matrice può avere una scheda esplicativa nel catalogo 4DM.
       </p>
-      <button class="btn btn-primary btn-sm" onclick="openCardEditor(null)">+ Nuova scheda</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="exportCatalogo()" title="Esporta tutte le voci in Excel">↓ Export Excel</button>
+        <label class="btn btn-secondary btn-sm" style="cursor:pointer;margin:0" title="Importa schede da Excel">
+          ↑ Import Excel
+          <input type="file" id="import-file" accept=".xlsx,.xls" style="display:none" onchange="importCatalogo(this)">
+        </label>
+        <button class="btn btn-primary btn-sm" onclick="openCardEditor(null)">+ Nuova scheda</button>
+      </div>
+    </div>
+    <!-- Import progress -->
+    <div id="import-progress" class="hidden" style="background:#E6F1FB;border:1px solid #185FA5;
+         border-radius:var(--radius);padding:10px 14px;margin-bottom:1rem;font-size:13px;color:#185FA5">
     </div>
 
     <!-- Editor scheda (nascosto di default) -->
@@ -228,6 +239,7 @@
 
 <script src="js/config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 
@@ -442,6 +454,203 @@ function closeCardEditor() {
 function previewCard() {
   if (!editingCardId) return
   window.open(`scheda.html?id=${editingCardId}`, '_blank')
+}
+
+// ── Export / Import Excel ─────────────────────────────────────
+
+const CARD_FIELDS = [
+  { key:'cell_id',        label:'cell_id',              editable:false },
+  { key:'item_index',     label:'item_index',           editable:false },
+  { key:'item_name',      label:'Titolo',               editable:false },
+  { key:'_description',   label:'Descrizione',          editable:false },
+  { key:'slug',           label:'slug',                 editable:true  },
+  { key:'problem_title',  label:'Problema (titolo)',    editable:true  },
+  { key:'motivazione',    label:'Motivazione',          editable:true  },
+  { key:'contesto',       label:'Contesto',             editable:true  },
+  { key:'impatto',        label:'Impatto',              editable:true  },
+  { key:'metodo',         label:'Metodo 4D',            editable:true  },
+  { key:'risultato',      label:'Risultato',            editable:true  },
+  { key:'tempi',          label:'Tempi',                editable:true  },
+  { key:'costi',          label:'Costi',                editable:true  },
+  { key:'inizio',         label:'Come iniziare',        editable:true  },
+  { key:'predisposizione',label:'Predisposizione',      editable:true  },
+  { key:'frase_finale',   label:'Frase finale',         editable:true  },
+  { key:'published',      label:'Pubblicata (si/no)',   editable:true  },
+]
+
+const SECTORS_MAP = {
+  sec:'Security', con:'Continuity', wor:'Workplace', inf:'Infrastructure', man:'Management'
+}
+const ACTIVITIES_MAP = ['Consulenza','Progettazione','Fornitura','Installazione','Manutenzione']
+
+async function exportCatalogo() {
+  // Costruisci mappa schede esistenti: cell_id:item_index → card
+  const cardMap = {}
+  allCards.forEach(c => { cardMap[`${c.cell_id}:${c.item_index}`] = c })
+
+  // Costruisci una riga per ogni voce della matrice
+  const rows = []
+  Object.values(cells).forEach(cell => {
+    const sId  = cell.id.split('-')[0]
+    const aIdx = parseInt(cell.id.split('-')[1])
+    ;(cell.items || []).forEach((item, idx) => {
+      const key  = `${cell.id}:${idx}`
+      const card = cardMap[key] || {}
+      const row  = {}
+      CARD_FIELDS.forEach(f => {
+        if (f.key === '_description') {
+          row[f.label] = item.d || ''
+        } else if (f.key === 'item_name') {
+          row[f.label] = item.n || ''
+        } else if (f.key === 'published') {
+          row[f.label] = card.published ? 'si' : ''
+        } else if (f.key === 'cell_id') {
+          row[f.label] = cell.id
+        } else if (f.key === 'item_index') {
+          row[f.label] = idx
+        } else {
+          row[f.label] = card[f.key] || ''
+        }
+      })
+      // Colonne di contesto (non editabili, solo reference)
+      row['_settore']  = SECTORS_MAP[sId] || sId
+      row['_attivita'] = ACTIVITIES_MAP[aIdx] || ''
+      row['_cella']    = cell.label || ''
+      rows.push(row)
+    })
+  })
+
+  // Crea workbook
+  const wb = XLSX.utils.book_new()
+  const ws = XLSX.utils.json_to_sheet(rows, {
+    header: [
+      ...CARD_FIELDS.map(f => f.label),
+      '_settore','_attivita','_cella'
+    ]
+  })
+
+  // Larghezze colonne
+  ws['!cols'] = [
+    {wch:12},{wch:8},{wch:28},{wch:40},{wch:28},{wch:36},
+    {wch:50},{wch:50},{wch:50},{wch:50},{wch:50},{wch:50},
+    {wch:50},{wch:50},{wch:50},{wch:40},{wch:12},
+    {wch:14},{wch:14},{wch:20}
+  ]
+
+  // Freeze prima riga + prime 3 colonne
+  ws['!freeze'] = { xSplit:3, ySplit:1 }
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Catalogo 4DM')
+
+  // Foglio istruzioni
+  const wsInfo = XLSX.utils.aoa_to_sheet([
+    ['ISTRUZIONI IMPORT/EXPORT CATALOGO 4DM'],
+    [''],
+    ['Colonne NON modificare:', 'cell_id, item_index, Titolo, Descrizione, _settore, _attivita, _cella'],
+    ['Colonne da compilare:', 'slug, Problema (titolo), Motivazione, Contesto, Impatto, Metodo 4D, Risultato, Tempi, Costi, Come iniziare, Predisposizione, Frase finale'],
+    ['Pubblicata (si/no):', 'Scrivi "si" per pubblicare la scheda, lascia vuoto per mantenerla in bozza'],
+    ['slug:', 'Identificatore URL amichevole es. watchguard-firewall (solo lettere minuscole, numeri e trattini)'],
+    [''],
+    ['Come usare:'],
+    ['1. Compila le colonne editabili (puoi usare AI per velocizzare)'],
+    ['2. Salva il file Excel'],
+    ['3. Vai su Admin → Catalogo 4DM → Import Excel'],
+    ['4. Seleziona il file: le schede verranno create o aggiornate automaticamente'],
+    [''],
+    ['Nota: le righe senza alcun campo compilato (oltre Titolo e Descrizione) vengono saltate in import.'],
+  ])
+  wsInfo['!cols'] = [{wch:25},{wch:80}]
+  XLSX.utils.book_append_sheet(wb, wsInfo, 'Istruzioni')
+
+  XLSX.writeFile(wb, `4DM_catalogo_${new Date().toISOString().slice(0,10)}.xlsx`)
+  toast('Export completato!', 'success')
+}
+
+async function importCatalogo(input) {
+  const file = input.files[0]
+  if (!file) return
+  input.value = ''  // reset per permettere reimport stesso file
+
+  const prog = document.getElementById('import-progress')
+  prog.classList.remove('hidden')
+  prog.textContent = 'Lettura file...'
+
+  const { data: { user } } = await sb.auth.getUser()
+
+  const reader = new FileReader()
+  reader.onload = async (e) => {
+    try {
+      const wb   = XLSX.read(e.target.result, { type:'array' })
+      const ws   = wb.Sheets['Catalogo 4DM']
+      if (!ws) { prog.textContent = 'Errore: foglio "Catalogo 4DM" non trovato.'; return }
+
+      const rows = XLSX.utils.sheet_to_json(ws, { defval:'' })
+      prog.textContent = `${rows.length} righe trovate. Importazione in corso...`
+
+      let created = 0, updated = 0, skipped = 0, errors = 0
+
+      for (const row of rows) {
+        const cellId   = String(row['cell_id']   || '').trim()
+        const itemIdx  = parseInt(row['item_index'])
+        const itemName = String(row['Titolo']    || '').trim()
+
+        if (!cellId || isNaN(itemIdx)) { skipped++; continue }
+
+        // Salta righe senza nessun campo compilato
+        const editableValues = CARD_FIELDS
+          .filter(f => f.editable && f.key !== 'published')
+          .map(f => String(row[f.label] || '').trim())
+        if (editableValues.every(v => !v)) { skipped++; continue }
+
+        // Recupera la descrizione dalla voce in matrice
+        const cell = cells[cellId]
+        const item = cell?.items?.[itemIdx]
+
+        const payload = {
+          cell_id:         cellId,
+          item_index:      itemIdx,
+          item_name:       itemName || item?.n || '',
+          slug:            String(row['slug'] || '').trim() || null,
+          problem_title:   String(row['Problema (titolo)'] || '').trim(),
+          motivazione:     String(row['Motivazione']       || '').trim(),
+          contesto:        String(row['Contesto']          || '').trim(),
+          impatto:         String(row['Impatto']           || '').trim(),
+          metodo:          String(row['Metodo 4D']         || '').trim(),
+          risultato:       String(row['Risultato']         || '').trim(),
+          tempi:           String(row['Tempi']             || '').trim(),
+          costi:           String(row['Costi']             || '').trim(),
+          inizio:          String(row['Come iniziare']     || '').trim(),
+          predisposizione: String(row['Predisposizione']   || '').trim(),
+          frase_finale:    String(row['Frase finale']      || '').trim(),
+          published:       String(row['Pubblicata (si/no)']|| '').trim().toLowerCase() === 'si',
+          updated_by:      user.id,
+        }
+
+        // Upsert basato su cell_id + item_index
+        const existing = allCards.find(c => c.cell_id === cellId && c.item_index === itemIdx)
+        let err
+        if (existing) {
+          ;({ error: err } = await sb.from('catalog_cards').update(payload).eq('id', existing.id))
+          if (!err) updated++
+        } else {
+          ;({ error: err } = await sb.from('catalog_cards').insert(payload))
+          if (!err) created++
+        }
+        if (err) { console.error(err); errors++ }
+
+        prog.textContent = `Importazione... (${created + updated + skipped + errors}/${rows.length})`
+      }
+
+      prog.textContent = `✓ Import completato: ${created} create, ${updated} aggiornate, ${skipped} saltate${errors > 0 ? ', ' + errors + ' errori' : ''}.`
+      setTimeout(() => prog.classList.add('hidden'), 5000)
+      loadCatalogo()
+
+    } catch (ex) {
+      prog.textContent = 'Errore lettura file: ' + ex.message
+      console.error(ex)
+    }
+  }
+  reader.readAsArrayBuffer(file)
 }
 
 async function saveCard() {
