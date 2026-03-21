@@ -88,7 +88,8 @@ textarea { resize: vertical; min-height: 80px; }
 
 /* ── Matrix table ────────────────────────────────────────── */
 .matrix-wrap { overflow-x: auto; padding: 1.5rem; }
-.matrix-table { border-collapse: separate; border-spacing: 5px; min-width: 750px; }
+.matrix-table { border-collapse: separate; border-spacing: 21px; min-width: 750px; }
+.matrix-table td { overflow: visible; }
 .matrix-table th { font-size: 11px; font-weight: 500; color: var(--muted);
                    padding: 6px 4px; text-align: center; white-space: nowrap; }
 .matrix-table th.sector-th {
@@ -97,7 +98,7 @@ textarea { resize: vertical; min-height: 80px; }
 
 .matrix-cell {
   border-radius: var(--radius); padding: 10px 12px; cursor: pointer;
-  border: 1.5px solid transparent; transition: border-color .15s, transform .1s;
+  border: 1.5px solid transparent; transition: border-color .15s, transform .1s, box-shadow .4s;
   min-width: 120px;
 }
 .matrix-cell:hover { transform: translateY(-1px); border-color: rgba(0,0,0,.12); }
@@ -123,10 +124,11 @@ textarea { resize: vertical; min-height: 80px; }
 }
 .detail-title { font-size: 16px; font-weight: 600; color: var(--text); }
 .detail-cov   { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 20px; }
-.items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 21px; }
 .item-card {
   background: #fafafa; border: 1px solid var(--border);
   border-radius: var(--radius); padding: 10px 12px;
+  transition: box-shadow .4s;
 }
 .item-name { font-size: 12px; font-weight: 600; color: var(--text); }
 .item-desc { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
