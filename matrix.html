@@ -202,6 +202,146 @@ let currentUser = null
 let currentProfile = null
 let cardIndex = {}   // chiave: "cell_id:item_index" → card id
 
+// ── Fatturato DB (righe-fatture-4d-23-24-25) ─────────────────
+const FATTURE_URL = 'https://pjyrjcdnmxthpwxpywip.supabase.co'
+const FATTURE_KEY = 'sb_publishable_iqrW_m5rY9_NX8C3_NPjNA_gXGBXBLt'
+const sbFat = supabase.createClient(FATTURE_URL, FATTURE_KEY)
+
+let _cellFatt  = {}  // cell_id  → { importo: €tot, count: n_righe }
+let _itemFatt  = {}  // codice_4dm → { importo: €tot, count: n_righe }
+
+// Ricava il codice_4dm da cell_id + item_index senza query a catalogo
+// es. "sec-0", 0 → "A1a"   |   "inf-3", 2 → "D4c"
+function getCodice4dm(cell_id, item_index) {
+  const [sectorId, actIdxStr] = cell_id.split('-')
+  const actIdx   = parseInt(actIdxStr)
+  const rowNum   = ['sec','con','wor','inf','man'].indexOf(sectorId) + 1
+  const colLetter = String.fromCharCode('A'.charCodeAt(0) + actIdx)
+  const itemLetter = String.fromCharCode('a'.charCodeAt(0) + item_index)
+  return `${colLetter}${rowNum}${itemLetter}`
+}
+
+// Spessore bordo: log₂(count+1), min 0px, max 10px
+function borderThickness(count) {
+  return Math.min(10, Math.log2(count + 1))
+}
+
+// Colore bordo: bianco→rosso basato sulla distanza dalla media
+// ratio = importo / (2 * media) → capped a [0,1]
+// 0 = bianco, media = rosa, 2×media = rosso pieno
+function borderColor(importo, mean) {
+  if (mean === 0) return 'rgb(255,255,255)'
+  const ratio = Math.min(1, importo / (mean * 2))
+  const g = Math.round(255 * (1 - ratio))
+  return `rgb(255,${g},${g})`
+}
+
+// Applica box-shadow ai .matrix-cell (cards della matrice)
+function applyMatrixCellBorders() {
+  for (let actIdx = 0; actIdx < 5; actIdx++) {
+    // Media della colonna (stesso actIdx = stessa attività)
+    const vals = SECTORS.map(s => (_cellFatt[`${s.id}-${actIdx}`]?.importo || 0))
+    const nonZero = vals.filter(v => v > 0)
+    const mean = nonZero.length ? nonZero.reduce((a, b) => a + b, 0) / nonZero.length : 0
+
+    SECTORS.forEach(s => {
+      const id  = `${s.id}-${actIdx}`
+      const el  = document.getElementById(`mc-${id}`)
+      if (!el) return
+      const d   = _cellFatt[id] || { importo: 0, count: 0 }
+      const px  = borderThickness(d.count)
+      const col = borderColor(d.importo, mean)
+      el.style.boxShadow = px > 0 ? `0 0 0 ${px.toFixed(1)}px ${col}` : 'none'
+    })
+  }
+}
+
+// Applica box-shadow agli .item-card del pannello dettaglio
+function applyItemCardBorders(cell_id) {
+  const cell = cells[cell_id]
+  if (!cell) return
+
+  // Media degli item nella stessa cella
+  const vals = (cell.items || []).map((_, idx) => {
+    const cod = getCodice4dm(cell_id, idx)
+    return _itemFatt[cod]?.importo || 0
+  })
+  const nonZero = vals.filter(v => v > 0)
+  const mean = nonZero.length ? nonZero.reduce((a, b) => a + b, 0) / nonZero.length : 0
+
+  cell.items.forEach((_, idx) => {
+    const el  = document.getElementById(`ic-${cell_id}-${idx}`)
+    if (!el) return
+    const cod = getCodice4dm(cell_id, idx)
+    const d   = _itemFatt[cod] || { importo: 0, count: 0 }
+    const px  = borderThickness(d.count)
+    const col = borderColor(d.importo, mean)
+    el.style.boxShadow = px > 0 ? `0 0 0 ${px.toFixed(1)}px ${col}` : 'none'
+    // Tooltip con i numeri
+    el.title = d.count > 0
+      ? `Fatturato: €${d.importo.toLocaleString('it-IT', {minimumFractionDigits:0})} · ${d.count} righe`
+      : 'Nessun fatturato collegato'
+  })
+}
+
+// Carica dati da righe_fatture e aggrega per cella/item
+async function loadFatturatoData() {
+  try {
+    // 1. Mapping codice_articolo → codice_4dm (tabella piccola, una sola fetch)
+    const { data: mapping, error: mapErr } = await sbFat
+      .from('mapping_articoli_4dm')
+      .select('codice_articolo,codice_4dm')
+    if (mapErr || !mapping) return
+
+    const artTo4dm = {}
+    mapping.forEach(m => { artTo4dm[m.codice_articolo] = m.codice_4dm })
+
+    // 2. Righe fatture: fetch paginata (chunk da 1000)
+    let allRighe = [], from = 0
+    while (true) {
+      const { data: chunk } = await sbFat
+        .from('righe_fatture')
+        .select('codice_articolo,importo')
+        .range(from, from + 999)
+      if (!chunk || chunk.length === 0) break
+      allRighe = allRighe.concat(chunk)
+      if (chunk.length < 1000) break
+      from += 1000
+    }
+
+    // 3. Aggrega per codice_4dm (item level)
+    const itemAgg = {}
+    allRighe.forEach(r => {
+      const cod = artTo4dm[r.codice_articolo]
+      if (!cod) return
+      if (!itemAgg[cod]) itemAgg[cod] = { importo: 0, count: 0 }
+      itemAgg[cod].importo += (Number(r.importo) || 0)
+      itemAgg[cod].count  += 1
+    })
+    _itemFatt = itemAgg
+
+    // 4. Aggrega per cell_id (cell level)
+    const cellAgg = {}
+    Object.entries(itemAgg).forEach(([cod, d]) => {
+      // Ricava cell_id dal codice: prima lettera=col, seconda cifra=riga
+      const colIdx  = cod.charCodeAt(0) - 'A'.charCodeAt(0)
+      const rowIdx  = parseInt(cod[1]) - 1
+      const prefix  = ['sec','con','wor','inf','man'][rowIdx]
+      const cell_id = `${prefix}-${colIdx}`
+      if (!cellAgg[cell_id]) cellAgg[cell_id] = { importo: 0, count: 0 }
+      cellAgg[cell_id].importo += d.importo
+      cellAgg[cell_id].count  += d.count
+    })
+    _cellFatt = cellAgg
+
+    // 5. Applica ai .matrix-cell già renderizzati
+    applyMatrixCellBorders()
+
+  } catch(e) {
+    console.warn('Fatturato non caricato:', e)
+  }
+}
+
 async function init() {
   const { data: { session } } = await sb.auth.getSession()
   if (!session) return window.location.href = 'index.html'
@@ -230,6 +370,7 @@ async function init() {
 
   renderMatrix()
   loadMySuggestions()
+  loadFatturatoData()  // bordi fatturato (asincrono, non blocca la UI)
 }
 
 function renderMatrix() {
@@ -306,7 +447,7 @@ function showDetail(id) {
            📄 Scheda 4DM
          </a>`
       : ''
-    return `<div class="item-card">
+    return `<div class="item-card" id="ic-${id}-${idx}">
       <div class="item-name">${it.n}</div>
       <div class="item-desc">${it.d}</div>
       ${cardLink}
@@ -315,6 +456,9 @@ function showDetail(id) {
 
   document.getElementById('detail-panel').classList.remove('hidden')
   document.getElementById('detail-panel').scrollIntoView({ behavior:'smooth', block:'nearest' })
+
+  // Bordi fatturato sulle item-card (se i dati sono già caricati)
+  applyItemCardBorders(id)
 }
 
 function closeDetail() {
