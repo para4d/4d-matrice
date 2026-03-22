@@ -91,6 +91,29 @@
     /* Totali colonna/riga nell'header */
     .col-total { font-size: 10px; color: var(--muted); font-weight: 400;
       display: block; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+    /* Riga totale per settore nella sector-th */
+    .sector-total { font-size: 11px; font-weight: 600; margin-top: 4px;
+      font-variant-numeric: tabular-nums; }
+
+    /* Card KPI in alto (Z0z, Z1z, ...) */
+    .kpi-bar { display: flex; gap: 16px; padding: 1rem 1.5rem 0;
+      flex-wrap: wrap; }
+    .kpi-card { background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 14px 20px; min-width: 200px;
+      flex: 1; max-width: 300px; }
+    .kpi-code  { font-size: 10px; font-family: monospace; color: var(--muted);
+      margin-bottom: 2px; }
+    .kpi-title { font-size: 13px; font-weight: 600; color: var(--text);
+      margin-bottom: 10px; line-height: 1.3; }
+    .kpi-desc  { font-size: 11px; color: var(--muted); margin-bottom: 10px;
+      line-height: 1.4; }
+    .kpi-metrics { display: flex; gap: 16px; flex-wrap: wrap; }
+    .kpi-metric { display: flex; flex-direction: column; gap: 2px; }
+    .kpi-metric-label { font-size: 10px; color: var(--muted); }
+    .kpi-metric-val   { font-size: 18px; font-weight: 600;
+      font-variant-numeric: tabular-nums; color: var(--red); }
+    .kpi-shimmer { height: 24px; width: 80px; }
   </style>
 </head>
 <body>
@@ -104,6 +127,9 @@
     <button class="btn-link" onclick="logout()">Esci</button>
   </div>
 </header>
+
+<!-- KPI bar (voci Z) -->
+<div class="kpi-bar" id="kpi-bar"></div>
 
 <!-- Legend -->
 <div style="display:flex;gap:16px;padding:1rem 1.5rem 0;flex-wrap:wrap;
@@ -172,6 +198,7 @@ const COV_LABELS  = { full:'Copertura piena', partial:'Copertura parziale', gap:
 let cells      = {}
 let cardIndex  = {}   // "cell_id:item_index" → card id
 let voceStats  = {}   // codice_4dm → { fatturato, n_fatture, n_clienti }
+let zCatalog   = []   // voci con codice che inizia per Z (da catalogo_4dm)
 let currentCell = null
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -221,7 +248,57 @@ async function init() {
 
   // Render subito con shimmer, poi carica i numeri
   renderMatrix()
+  loadZVoci()      // KPI bar in cima (voci Z)
   loadVoceStats()
+}
+
+// ── Carica voci Z da catalogo_4dm e mostra KPI bar ──────────
+async function loadZVoci() {
+  try {
+    // Legge dal catalogo tutte le voci con codice che inizia per Z
+    const data = await fatGet('/catalogo_4dm?codice_4dm=like.Z*&select=codice_4dm,descrizione_voce,cella_titolo&order=codice_4dm')
+    zCatalog = data || []
+    renderKpiBar()   // render subito con shimmer
+  } catch(e) {
+    console.warn('loadZVoci:', e)
+  }
+}
+
+function renderKpiBar() {
+  if (!zCatalog.length) return
+  const bar = document.getElementById('kpi-bar')
+  const loading = Object.keys(voceStats).length === 0
+
+  bar.innerHTML = zCatalog.map(z => {
+    const stat = voceStats[z.codice_4dm]
+    const fat  = stat?.fatturato || 0
+    const nFat = stat?.n_fatture || 0
+    const nCli = stat?.n_clienti || 0
+    return `<div class="kpi-card">
+      <div class="kpi-code">${z.codice_4dm}</div>
+      <div class="kpi-title">${z.descrizione_voce || z.cella_titolo || z.codice_4dm}</div>
+      <div class="kpi-metrics">
+        <div class="kpi-metric">
+          <span class="kpi-metric-label">Fatturato</span>
+          ${loading
+            ? '<div class="shimmer kpi-shimmer"></div>'
+            : `<span class="kpi-metric-val">${fmtEur(fat)}</span>`}
+        </div>
+        <div class="kpi-metric">
+          <span class="kpi-metric-label">Fatture</span>
+          ${loading
+            ? '<div class="shimmer kpi-shimmer"></div>'
+            : `<span class="kpi-metric-val" style="font-size:16px;color:var(--text)">${fmtN(nFat)}</span>`}
+        </div>
+        <div class="kpi-metric">
+          <span class="kpi-metric-label">Clienti</span>
+          ${loading
+            ? '<div class="shimmer kpi-shimmer"></div>'
+            : `<span class="kpi-metric-val" style="font-size:16px;color:var(--text)">${fmtN(nCli)}</span>`}
+        </div>
+      </div>
+    </div>`
+  }).join('')
 }
 
 // ── Carica v_fatturato_voci ───────────────────────────────────
@@ -243,7 +320,8 @@ async function loadVoceStats() {
     document.getElementById('last-update').textContent =
       `Dati aggiornati — ${all.length} voci con fatturato`
 
-    // Aggiorna tutte le celle e le card già visibili
+    // Aggiorna KPI bar, matrice e dettaglio
+    renderKpiBar()
     renderMatrix()
     if (currentCell) renderDetailItems(currentCell)
 
@@ -283,6 +361,15 @@ function renderMatrix() {
       <th class="sector-th" style="color:${s.color}">
         ${s.label}<br>
         <span style="font-size:10px;font-weight:400;color:var(--muted)">${s.sub}</span>
+        ${(()=>{
+          const rf=ACTIVITIES.map((_,ai)=>{
+            const ce=cells[s.id+'-'+ai]; if(!ce) return 0
+            return (ce.items||[]).reduce((sm,_,ii)=>sm+(voceStats[getCodice4dm(s.id+'-'+ai,ii)]?.fatturato||0),0)
+          }).reduce((a,b)=>a+b,0)
+          if(rf>0) return '<div class="sector-total" style="color:'+s.color+'">'+fmtEur(rf)+'</div>'
+          if(!Object.keys(voceStats).length) return '<div class="shimmer" style="width:70px;margin-top:4px"></div>'
+          return ''
+        })()}
       </th>`
 
     for (let i = 0; i < 5; i++) {
