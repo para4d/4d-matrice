@@ -30,7 +30,7 @@
 }
 
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-       background: var(--red-bg); color: var(--text); min-height: 100vh; }
+       background: #EEF5EE; color: var(--text); min-height: 100vh; }
 
 /* ── Topbar ─────────────────────────────────────────────── */
 .topbar {
