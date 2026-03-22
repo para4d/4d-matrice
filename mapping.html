@@ -467,20 +467,37 @@ async function upsertOne(art, cod) {
   await fatPost('/mapping_articoli_4dm', { codice_articolo: art, codice_4dm: cod })
 }
 
+async function verifyRow(art, expectedCod) {
+  // Legge la riga appena scritta per confermare la persistenza
+  const enc = encodeURIComponent(art)
+  const data = await fatGet(`/mapping_articoli_4dm?codice_articolo=eq.${enc}&select=codice_4dm`)
+  if (expectedCod === '') {
+    // Ci aspettiamo nessuna riga
+    if (data && data.length > 0) throw new Error(`Verifica fallita: la riga esiste ancora dopo la cancellazione (RLS potrebbe bloccare le write)`)
+  } else {
+    // Ci aspettiamo esattamente la riga con il codice salvato
+    if (!data || data.length === 0) throw new Error(`Verifica fallita: nessuna riga trovata dopo il salvataggio (RLS potrebbe bloccare le write)`)
+    if (data[0].codice_4dm !== expectedCod) throw new Error(`Verifica fallita: atteso "${expectedCod}", trovato "${data[0].codice_4dm}"`)
+  }
+}
+
 async function saveRow(art) {
   const pend = pendingMap[art]
   if (pend === undefined) return
   try {
     if (pend === '') {
       await fatDelete(`/mapping_articoli_4dm?codice_articolo=eq.${encodeURIComponent(art)}`)
-      delete currentMap[art]
     } else {
       await upsertOne(art, pend)
-      currentMap[art] = pend
     }
+    // Verifica che la scrittura sia stata effettivamente persistita
+    await verifyRow(art, pend)
+    // Solo se la verifica passa aggiorniamo lo stato locale
+    if (pend === '') delete currentMap[art]
+    else currentMap[art] = pend
     delete pendingMap[art]
     updateSaveAllBtn(); renderStats(); renderTable(); renderPagination()
-    toast(`Mapping "${art}" salvato.`)
+    toast(`Mapping "${art}" salvato e verificato.`)
   } catch(e) {
     dlog('✗ saveRow: ' + e.message, 'lerr')
     document.getElementById('dbg').classList.remove('hidden')
@@ -499,11 +516,12 @@ async function saveAll() {
     try {
       if (cod === '') {
         await fatDelete(`/mapping_articoli_4dm?codice_articolo=eq.${encodeURIComponent(art)}`)
-        delete currentMap[art]
       } else {
         await upsertOne(art, cod)
-        currentMap[art] = cod
       }
+      // Verifica persistenza
+      await verifyRow(art, cod)
+      if (cod === '') delete currentMap[art]; else currentMap[art] = cod
       delete pendingMap[art]; ok++
     } catch(e) {
       errors.push(art + ': ' + e.message)
