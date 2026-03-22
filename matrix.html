@@ -15,6 +15,7 @@
     <span class="topbar-name" id="top-name"></span>
     <span class="badge" id="top-badge"></span>
     <a id="admin-link" href="admin.html" class="btn btn-secondary btn-sm hidden">Pannello Admin</a>
+    <a id="mapping-link" href="mapping.html" class="btn btn-secondary btn-sm hidden">🔗 Mapping</a>
     <button class="btn-link" onclick="logout()">Esci</button>
   </div>
 </header>
@@ -360,6 +361,7 @@ async function init() {
   badge.textContent = profile.role
   badge.className = 'badge badge-' + (profile.role === 'admin' ? 'admin' : profile.role === 'viewer' ? 'viewer' : 'contrib')
   if (profile.role === 'admin') document.getElementById('admin-link').classList.remove('hidden')
+  if (profile.role === 'admin') document.getElementById('mapping-link').classList.remove('hidden')
   if (profile.role === 'viewer') document.getElementById('d-suggest-btn').style.display = 'none'
 
   // load matrix cells

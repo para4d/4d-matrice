@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mapping Articoli — 4D Sistemi</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* ── Mapping-specific styles ── */
+    .mapping-wrap { padding: 1.5rem; }
+
+    .map-stats { display: flex; gap: 12px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .map-stat { background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 10px 18px; }
+    .map-stat-label { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+    .map-stat-val { font-size: 20px; font-weight: 600; }
+
+    .map-toolbar { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+    .map-toolbar input, .map-toolbar select {
+      padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+      font-size: 13px; background: var(--white); color: var(--text); }
+    .map-toolbar input { width: 230px; }
+
+    .map-table-wrap { overflow-x: auto; }
+    .map-table { width: 100%; border-collapse: collapse; background: var(--white);
+      border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; }
+    .map-table thead { background: #f5f5f5; }
+    .map-table th { padding: 9px 10px; text-align: left; font-size: 11px; font-weight: 600;
+      color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+      cursor: pointer; user-select: none; }
+    .map-table th:hover { color: var(--text); }
+    .map-table th.sort-asc::after  { content: ' ▲'; font-size: 9px; }
+    .map-table th.sort-desc::after { content: ' ▼'; font-size: 9px; }
+    .map-table th:last-child, .map-table th:nth-child(6) { cursor: default; }
+    .map-table th:nth-child(6):hover { color: var(--muted); }
+    .map-table td { padding: 8px 10px; border-bottom: 1px solid #eee; vertical-align: middle; }
+    .map-table tr:last-child td { border-bottom: none; }
+    .map-table tr:hover td { background: #fafafa; }
+    .map-table tr.changed td { background: #fffde7; }
+    .map-table tr.changed:hover td { background: #fff9c4; }
+
+    .code-art { font-family: monospace; font-size: 12px; font-weight: 600; }
+    .tdesc { max-width: 200px; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; color: var(--muted); font-size: 12px; }
+    .tr, .ti { text-align: right; font-variant-numeric: tabular-nums; }
+    .ti { font-weight: 500; }
+
+    .badge-map { display: inline-block; padding: 2px 8px; border-radius: 20px;
+      font-size: 11px; font-weight: 600; }
+    .bm  { background: var(--con-bg); color: var(--con-color); }
+    .bum { background: #f0f0f0; color: var(--muted); }
+    .bch { background: #FFF3CD; color: #856404; }
+
+    .mpill { display: inline-block; padding: 1px 7px; border-radius: 20px;
+      font-size: 10px; font-weight: 600; margin-right: 3px; }
+    .ps { background: var(--sec-bg); color: var(--sec-color); }
+    .pc { background: var(--con-bg); color: var(--con-color); }
+    .pw { background: var(--wor-bg); color: var(--wor-color); }
+    .pi { background: var(--inf-bg); color: var(--inf-color); }
+    .pm { background: var(--man-bg); color: var(--man-color); }
+
+    .map-sel { padding: 5px 8px; border: 1px solid var(--border);
+      border-radius: var(--radius); font-size: 12px; background: var(--white);
+      color: var(--text); min-width: 220px; max-width: 300px; }
+    .map-sel.is-changed { border-color: #EF9F27; background: #FFFDE7; }
+    .map-sel.is-set { border-color: var(--con-color); }
+
+    .save-btn { padding: 4px 10px; border-radius: var(--radius); font-size: 11px;
+      font-weight: 600; border: none; cursor: pointer;
+      background: var(--con-color); color: #fff; }
+    .save-btn:disabled { opacity: .25; cursor: default; }
+
+    .map-pagination { display: flex; gap: 6px; align-items: center;
+      padding: 1rem 0; font-size: 12px; color: var(--muted); }
+
+    .dbg { background: #1a1a2e; color: #7ec8e3; font-family: monospace;
+      font-size: 12px; padding: 12px; border-radius: var(--radius);
+      max-height: 180px; overflow-y: auto; margin-bottom: 1rem; }
+    .dbg.hidden { display: none; }
+    .lok { color: #4caf50; } .lerr { color: #f44336; }
+  </style>
+</head>
+<body>
+
+<header class="topbar">
+  <span class="topbar-logo">4D Sistemi — Mapping Articoli</span>
+  <div class="topbar-right">
+    <span class="topbar-name" id="top-name"></span>
+    <span class="badge badge-admin">admin</span>
+    <a href="admin.html" class="btn btn-secondary btn-sm">← Admin</a>
+    <button class="btn-link" onclick="logout()">Esci</button>
+  </div>
+</header>
+
+<div class="mapping-wrap">
+
+  <!-- Stats -->
+  <div class="map-stats" id="map-stats">
+    <div class="map-stat">
+      <div class="map-stat-label">Stato</div>
+      <div class="map-stat-val" id="load-status" style="font-size:14px">Caricamento...</div>
+    </div>
+  </div>
+
+  <!-- Debug log (hidden after load) -->
+  <div class="dbg hidden" id="dbg"></div>
+
+  <!-- Toolbar -->
+  <div class="map-toolbar" id="map-toolbar" style="display:none">
+    <input type="text" id="search" placeholder="Cerca codice o descrizione…" oninput="applyFilters()">
+    <select id="f-settore" onchange="applyFilters()">
+      <option value="">Tutti i settori</option>
+      <option value="Security">Security</option>
+      <option value="Continuity">Continuity</option>
+      <option value="Workplace">Workplace</option>
+      <option value="Infrastructure">Infrastructure</option>
+      <option value="Management">Management</option>
+    </select>
+    <select id="f-stato" onchange="applyFilters()">
+      <option value="">Tutti</option>
+      <option value="mapped">Mappati</option>
+      <option value="unmapped">Non mappati</option>
+      <option value="changed">Modificati</option>
+    </select>
+    <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Reimposta</button>
+    <button class="btn btn-secondary btn-sm"
+      onclick="document.getElementById('dbg').classList.toggle('hidden')">Log</button>
+    <span style="margin-left:auto;font-size:12px;color:var(--muted)" id="f-count"></span>
+    <span id="changes-badge" style="font-size:12px;color:var(--muted)"></span>
+    <button class="btn btn-primary btn-sm" id="save-all-btn" onclick="saveAll()" disabled>
+      💾 Salva tutte le modifiche
+    </button>
+  </div>
+
+  <!-- Table -->
+  <div class="map-table-wrap">
+    <table class="map-table">
+      <thead>
+        <tr>
+          <th onclick="sortBy('codice_articolo')" id="th-codice_articolo">Codice articolo</th>
+          <th onclick="sortBy('descrizione_breve')" id="th-descrizione_breve">Descrizione</th>
+          <th onclick="sortBy('n_righe')" id="th-n_righe" style="text-align:right">Righe</th>
+          <th onclick="sortBy('importo')" id="th-importo" style="text-align:right">Importo</th>
+          <th onclick="sortBy('mapping')" id="th-mapping">Mapping corrente</th>
+          <th>Assegna codice 4DM</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Caricamento...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="map-pagination" id="map-pagination"></div>
+
+</div><!-- /mapping-wrap -->
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+
+// ── Auth (progetto matrice) ───────────────────────────────────
+const sbMain = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
+async function initAuth() {
+  const { data: { session } } = await sbMain.auth.getSession()
+  if (!session) { window.location.href = 'index.html'; return false }
+  const { data: profile } = await sbMain.from('profiles')
+    .select('full_name,role').eq('id', session.user.id).single()
+  if (!profile || profile.role !== 'admin') {
+    alert('Accesso riservato agli amministratori.')
+    window.location.href = 'matrix.html'; return false
+  }
+  document.getElementById('top-name').textContent = profile.full_name || session.user.email
+  return true
+}
+
+async function logout() { await sbMain.auth.signOut(); window.location.href = 'index.html' }
+
+// ── Fatture DB (REST diretto) ─────────────────────────────────
+const FAT_BASE = 'https://pjyrjcdnmxthpwxpywip.supabase.co/rest/v1'
+const FAT_KEY  = 'sb_publishable_iqrW_m5rY9_NX8C3_NPjNA_gXGBXBLt'
+const FAT_HDR  = { 'apikey': FAT_KEY, 'Authorization': 'Bearer ' + FAT_KEY, 'Content-Type': 'application/json' }
+
+async function fatGet(path) {
+  const r = await fetch(FAT_BASE + path, { headers: FAT_HDR })
+  if (!r.ok) { const t = await r.text(); throw new Error('HTTP ' + r.status + ': ' + t) }
+  return r.json()
+}
+async function fatPatch(path, body) {
+  const r = await fetch(FAT_BASE + path, {
+    method: 'PATCH', headers: { ...FAT_HDR, 'Prefer': 'return=minimal' },
+    body: JSON.stringify(body)
+  })
+  if (!r.ok) { const t = await r.text(); throw new Error('PATCH ' + r.status + ': ' + t) }
+}
+async function fatPost(path, body) {
+  const r = await fetch(FAT_BASE + path, {
+    method: 'POST', headers: { ...FAT_HDR, 'Prefer': 'return=minimal' },
+    body: JSON.stringify(body)
+  })
+  if (!r.ok) { const t = await r.text(); throw new Error('POST ' + r.status + ': ' + t) }
+}
+async function fatDelete(path) {
+  const r = await fetch(FAT_BASE + path, { method: 'DELETE', headers: FAT_HDR })
+  if (!r.ok) { const t = await r.text(); throw new Error('DELETE ' + r.status + ': ' + t) }
+}
+
+// ── State ─────────────────────────────────────────────────────
+const PAGE_SIZE = 50
+let allRighe = [], catalog = [], currentMap = {}, pendingMap = {}
+let filtered = [], page = 0
+let sortCol = 'importo', sortDir = -1   // default: importo desc
+
+// ── Debug log ─────────────────────────────────────────────────
+function dlog(msg, cls='') {
+  const b = document.getElementById('dbg')
+  const d = document.createElement('div'); d.className = cls; d.textContent = msg
+  b.appendChild(d); b.scrollTop = b.scrollHeight
+}
+
+// ── Load ──────────────────────────────────────────────────────
+async function loadAll() {
+  try {
+    dlog('▶ Test connessione DB fatture...')
+    await fatGet('/catalogo_4dm?limit=1')
+    dlog('✓ Connessione OK', 'lok')
+
+    dlog('▶ Caricamento catalogo_4dm...')
+    catalog = await fatGet('/catalogo_4dm?select=*&order=codice_4dm')
+    dlog(`✓ ${catalog.length} voci`, 'lok')
+
+    dlog('▶ Caricamento mapping esistente...')
+    const mapData = await fatGet('/mapping_articoli_4dm?select=codice_articolo,codice_4dm')
+    currentMap = {}
+    mapData.forEach(m => { currentMap[m.codice_articolo] = m.codice_4dm })
+    dlog(`✓ ${mapData.length} mapping`, 'lok')
+
+    dlog('▶ Caricamento righe_fatture (paginato)...')
+    let rows = [], off = 0
+    while (true) {
+      const chunk = await fatGet(`/righe_fatture?select=codice_articolo,descrizione_breve,importo&limit=1000&offset=${off}`)
+      if (!chunk || !chunk.length) break
+      rows = rows.concat(chunk)
+      document.getElementById('load-status').textContent = `Righe: ${rows.length.toLocaleString('it-IT')}`
+      if (chunk.length < 1000) break
+      off += 1000
+    }
+    dlog(`✓ ${rows.length.toLocaleString('it-IT')} righe totali`, 'lok')
+
+    // Aggrega per codice_articolo
+    const agg = {}
+    rows.forEach(r => {
+      if (!agg[r.codice_articolo])
+        agg[r.codice_articolo] = { descrizione_breve: r.descrizione_breve, n_righe: 0, importo: 0 }
+      agg[r.codice_articolo].n_righe++
+      agg[r.codice_articolo].importo += Number(r.importo) || 0
+    })
+    allRighe = Object.entries(agg)
+      .map(([cod, d]) => ({ codice_articolo: cod, ...d }))
+
+    dlog(`✓ ${allRighe.length} codici articolo unici`, 'lok')
+
+    document.getElementById('dbg').classList.add('hidden')
+    document.getElementById('map-toolbar').style.display = 'flex'
+    renderStats()
+    applyFilters()
+
+  } catch(e) {
+    dlog('✗ ERRORE: ' + e.message, 'lerr')
+    document.getElementById('dbg').classList.remove('hidden')
+    document.getElementById('load-status').textContent = 'Errore — vedi log'
+    document.getElementById('load-status').style.color = 'var(--gap)'
+  }
+}
+
+// ── Stats ─────────────────────────────────────────────────────
+function renderStats() {
+  const tR = allRighe.reduce((a, r) => a + r.n_righe, 0)
+  const tI = allRighe.reduce((a, r) => a + r.importo, 0)
+  const mapped = allRighe.filter(r => {
+    const p = pendingMap[r.codice_articolo]
+    return p !== undefined ? p !== '' : !!currentMap[r.codice_articolo]
+  }).length
+  document.getElementById('map-stats').innerHTML = `
+    <div class="map-stat"><div class="map-stat-label">Codici articolo</div>
+      <div class="map-stat-val">${allRighe.length}</div></div>
+    <div class="map-stat"><div class="map-stat-label">Righe fatture</div>
+      <div class="map-stat-val">${tR.toLocaleString('it-IT')}</div></div>
+    <div class="map-stat"><div class="map-stat-label">Fatturato totale</div>
+      <div class="map-stat-val" style="font-size:15px">${fmt(tI)}</div></div>
+    <div class="map-stat"><div class="map-stat-label">Mappati</div>
+      <div class="map-stat-val" style="color:var(--con-color)">${mapped}</div></div>
+    <div class="map-stat"><div class="map-stat-label">Non mappati</div>
+      <div class="map-stat-val" style="color:var(--gap)">${allRighe.length - mapped}</div></div>`
+}
+
+// ── Sort ──────────────────────────────────────────────────────
+function sortBy(col) {
+  if (col === sortCol) sortDir *= -1; else { sortCol = col; sortDir = 1 }
+  // Reset th classes
+  document.querySelectorAll('.map-table th').forEach(th => {
+    th.classList.remove('sort-asc','sort-desc')
+  })
+  const th = document.getElementById('th-' + col)
+  if (th) th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc')
+  page = 0; renderTable(); renderPagination()
+}
+
+function sortedFiltered() {
+  return [...filtered].sort((a, b) => {
+    let va, vb
+    if (sortCol === 'mapping') {
+      va = currentMap[a.codice_articolo] || ''
+      vb = currentMap[b.codice_articolo] || ''
+    } else {
+      va = a[sortCol] ?? ''
+      vb = b[sortCol] ?? ''
+    }
+    if (typeof va === 'string') return va.localeCompare(vb) * sortDir
+    return (va - vb) * sortDir
+  })
+}
+
+// ── Filters ───────────────────────────────────────────────────
+function applyFilters() {
+  const s  = document.getElementById('search').value.toLowerCase()
+  const fs = document.getElementById('f-settore').value
+  const ft = document.getElementById('f-stato').value
+
+  filtered = allRighe.filter(r => {
+    if (s && !r.codice_articolo.toLowerCase().includes(s) &&
+        !(r.descrizione_breve||'').toLowerCase().includes(s)) return false
+    const saved   = currentMap[r.codice_articolo] || ''
+    const pend    = pendingMap[r.codice_articolo]
+    const cur     = pend !== undefined ? pend : saved
+    const changed = pend !== undefined && pend !== saved
+    if (ft === 'mapped'   && !cur) return false
+    if (ft === 'unmapped' && cur)  return false
+    if (ft === 'changed'  && !changed) return false
+    if (fs) {
+      const cat = cur ? catalog.find(c => c.codice_4dm === cur) : null
+      if (!cat || cat.settore !== fs) return false
+    }
+    return true
+  })
+
+  document.getElementById('f-count').textContent = `${filtered.length} risultati`
+  page = 0; renderTable(); renderPagination()
+}
+
+function clearFilters() {
+  document.getElementById('search').value = ''
+  document.getElementById('f-settore').value = ''
+  document.getElementById('f-stato').value = ''
+  applyFilters()
+}
+
+// ── Catalog select options ────────────────────────────────────
+function buildOptions(sel) {
+  const g = {}
+  catalog.forEach(c => { if (!g[c.settore]) g[c.settore] = []; g[c.settore].push(c) })
+  let h = '<option value="">— nessun mapping —</option>'
+  Object.entries(g).forEach(([s, items]) => {
+    h += `<optgroup label="${s}">`
+    items.forEach(c => {
+      h += `<option value="${c.codice_4dm}"${c.codice_4dm === sel ? ' selected' : ''}>`
+        + `${c.codice_4dm} · ${c.descrizione_voce || c.cella_titolo || ''}</option>`
+    })
+    h += '</optgroup>'
+  })
+  return h
+}
+
+// ── Table ─────────────────────────────────────────────────────
+function pillClass(s) {
+  return 'mpill ' + ({ Security:'ps', Continuity:'pc', Workplace:'pw', Infrastructure:'pi', Management:'pm' }[s] || 'ps')
+}
+function fmt(n) { return '€\u202f' + Math.round(n).toLocaleString('it-IT') }
+
+function renderTable() {
+  const sorted = sortedFiltered()
+  const slice  = sorted.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
+
+  if (!slice.length) {
+    document.getElementById('tbody').innerHTML =
+      `<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Nessun risultato</td></tr>`
+    return
+  }
+
+  document.getElementById('tbody').innerHTML = slice.map(r => {
+    const saved   = currentMap[r.codice_articolo] || ''
+    const pend    = pendingMap[r.codice_articolo]
+    const cur     = pend !== undefined ? pend : saved
+    const changed = pend !== undefined && pend !== saved
+    const cat     = cur ? catalog.find(c => c.codice_4dm === cur) : null
+    const pill    = cat ? `<span class="${pillClass(cat.settore)}">${cat.settore}</span>` : ''
+    const bTxt    = changed ? 'Modificato' : (cur || '—')
+    const bCls    = changed ? 'bch' : (cur ? 'bm' : 'bum')
+    const sCls    = changed ? 'map-sel is-changed' : (cur ? 'map-sel is-set' : 'map-sel')
+    // Codice nell'attributo data (no escaping in onclick per sicurezza)
+    return `<tr class="${changed ? 'changed' : ''}" data-cod="${r.codice_articolo}">
+      <td><span class="code-art">${r.codice_articolo}</span></td>
+      <td><span class="tdesc" title="${r.descrizione_breve || ''}">${r.descrizione_breve || '—'}</span></td>
+      <td class="tr">${r.n_righe.toLocaleString('it-IT')}</td>
+      <td class="ti">${fmt(r.importo)}</td>
+      <td class="badge-cell">${pill} <span class="badge-map ${bCls}">${bTxt}</span></td>
+      <td><select class="${sCls}" onchange="onSel(this, '${r.codice_articolo}')">${buildOptions(cur)}</select></td>
+      <td><button class="save-btn" onclick="saveRow('${r.codice_articolo}')" ${!changed ? 'disabled' : ''}>${changed ? 'Salva' : '✓'}</button></td>
+    </tr>`
+  }).join('')
+}
+
+function renderPagination() {
+  const pages = Math.ceil(filtered.length / PAGE_SIZE)
+  if (pages <= 1) { document.getElementById('map-pagination').innerHTML = ''; return }
+  document.getElementById('map-pagination').innerHTML =
+    `<button class="btn btn-secondary btn-sm" onclick="goPage(${page - 1})" ${page === 0 ? 'disabled' : ''}>← Prec</button>
+     <span>Pagina ${page + 1} di ${pages} &middot; ${filtered.length} risultati</span>
+     <button class="btn btn-secondary btn-sm" onclick="goPage(${page + 1})" ${page >= pages - 1 ? 'disabled' : ''}>Succ →</button>`
+}
+function goPage(p) { page = p; renderTable(); renderPagination(); window.scrollTo(0, 0) }
+
+// ── Select change ─────────────────────────────────────────────
+function onSel(el, art) {
+  const val = el.value
+  if (val === (currentMap[art] || '')) delete pendingMap[art]
+  else pendingMap[art] = val
+
+  updateSaveAllBtn(); renderStats()
+
+  const changed = pendingMap[art] !== undefined
+  el.className = changed ? 'map-sel is-changed' : (val ? 'map-sel is-set' : 'map-sel')
+  const tr  = el.closest('tr')
+  if (tr) tr.className = changed ? 'changed' : ''
+  const btn = tr?.querySelector('.save-btn')
+  if (btn) { btn.disabled = !changed; btn.textContent = changed ? 'Salva' : '✓' }
+  const cat  = val ? catalog.find(c => c.codice_4dm === val) : null
+  const pill = cat ? `<span class="${pillClass(cat.settore)}">${cat.settore}</span>` : ''
+  const bTxt = changed ? 'Modificato' : (val || '—')
+  const bCls = changed ? 'bch' : (val ? 'bm' : 'bum')
+  const bc   = tr?.querySelector('.badge-cell')
+  if (bc) bc.innerHTML = `${pill} <span class="badge-map ${bCls}">${bTxt}</span>`
+}
+
+function updateSaveAllBtn() {
+  const n = Object.keys(pendingMap).length
+  document.getElementById('save-all-btn').disabled = n === 0
+  document.getElementById('changes-badge').textContent =
+    n > 0 ? `${n} modifica${n > 1 ? 'e' : ''} in sospeso` : ''
+}
+
+// ── Save (PATCH se esiste, POST se nuovo) ─────────────────────
+async function upsertOne(art, cod) {
+  const enc = encodeURIComponent(art)
+  if (currentMap[art] !== undefined) {
+    await fatPatch(`/mapping_articoli_4dm?codice_articolo=eq.${enc}`, { codice_4dm: cod })
+  } else {
+    await fatPost('/mapping_articoli_4dm', { codice_articolo: art, codice_4dm: cod })
+  }
+}
+
+async function saveRow(art) {
+  const pend = pendingMap[art]
+  if (pend === undefined) return
+  try {
+    if (pend === '') {
+      await fatDelete(`/mapping_articoli_4dm?codice_articolo=eq.${encodeURIComponent(art)}`)
+      delete currentMap[art]
+    } else {
+      await upsertOne(art, pend)
+      currentMap[art] = pend
+    }
+    delete pendingMap[art]
+    updateSaveAllBtn(); renderStats(); renderTable(); renderPagination()
+    toast(`Mapping "${art}" salvato.`)
+  } catch(e) {
+    dlog('✗ saveRow: ' + e.message, 'lerr')
+    document.getElementById('dbg').classList.remove('hidden')
+    toast('Errore: ' + e.message, 'error')
+  }
+}
+
+async function saveAll() {
+  const entries = Object.entries(pendingMap)
+  if (!entries.length) return
+  const btn = document.getElementById('save-all-btn')
+  btn.disabled = true; btn.textContent = `Salvataggio ${entries.length}...`
+  let ok = 0, errors = []
+
+  for (const [art, cod] of entries) {
+    try {
+      if (cod === '') {
+        await fatDelete(`/mapping_articoli_4dm?codice_articolo=eq.${encodeURIComponent(art)}`)
+        delete currentMap[art]
+      } else {
+        await upsertOne(art, cod)
+        currentMap[art] = cod
+      }
+      delete pendingMap[art]; ok++
+    } catch(e) {
+      errors.push(art + ': ' + e.message)
+      dlog('✗ ' + art + ': ' + e.message, 'lerr')
+    }
+  }
+
+  btn.textContent = '💾 Salva tutte le modifiche'
+  updateSaveAllBtn(); renderStats(); applyFilters()
+
+  if (errors.length) {
+    document.getElementById('dbg').classList.remove('hidden')
+    toast(`${ok} salvati, ${errors.length} errori — vedi log`, 'error')
+  } else {
+    toast(`${ok} mapping salvati con successo.`)
+  }
+}
+
+// ── Toast ─────────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const el = document.getElementById('toast')
+  el.textContent = msg; el.className = 'toast ' + type
+  setTimeout(() => el.className = 'toast hidden', 3500)
+}
+
+// ── Init ──────────────────────────────────────────────────────
+async function init() {
+  const ok = await initAuth()
+  if (ok) loadAll()
+}
+
+// Attiva indicatore ordinamento iniziale (importo desc)
+document.addEventListener('DOMContentLoaded', () => {
+  const th = document.getElementById('th-importo')
+  if (th) th.classList.add('sort-desc')
+})
+
+init()
+</script>
+</body>
+</html>
