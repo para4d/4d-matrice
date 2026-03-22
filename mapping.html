@@ -500,7 +500,9 @@ async function saveRow(art) {
   const pend = pendingMap[art]
   if (pend === undefined) return
   showLog()
-  dlog(`▶ saveRow: "${art}" → "${pend}"`)
+  // Stack trace per capire chi chiama saveRow
+  const stack = new Error().stack.split('\n').slice(1,3).join(' | ')
+  dlog(`▶ saveRow: "${art}" → "${pend}" | chiamato da: ${stack}`)
   try {
     const enc = encodeURIComponent(art)
     if (pend === '') {
