@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analytics — 4D Sistemi</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { background: #EEF5EE; }
+
+    /* ── Matrix numerica ── */
+    .matrix-wrap { overflow-x: auto; padding: 1.5rem; }
+    .matrix-table { border-collapse: separate; border-spacing: 21px; min-width: 750px; }
+    .matrix-table td { overflow: visible; }
+    .matrix-table th { font-size: 11px; font-weight: 500; color: var(--muted);
+      padding: 6px 4px; text-align: center; white-space: nowrap; }
+    .matrix-table th.sector-th { text-align: left; padding: 6px 8px;
+      min-width: 140px; font-size: 12px; }
+
+    .matrix-cell {
+      border-radius: var(--radius); padding: 10px 12px; cursor: pointer;
+      border: 1px solid #000; min-width: 140px;
+      transition: transform .1s;
+    }
+    .matrix-cell:hover { transform: translateY(-1px); }
+    .matrix-cell.active { border-width: 2px; }
+
+    .cell-label { font-size: 11px; font-weight: 600; margin-bottom: 6px; }
+
+    /* Numeri nella card matrice */
+    .cell-metrics { display: flex; flex-direction: column; gap: 2px; margin-bottom: 5px; }
+    .cell-metric  { display: flex; justify-content: space-between; align-items: baseline;
+      font-size: 10px; gap: 6px; }
+    .cell-metric-label { color: var(--muted); white-space: nowrap; }
+    .cell-metric-val   { font-weight: 600; font-variant-numeric: tabular-nums;
+      text-align: right; }
+
+    .cell-cov   { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+    .cov-dot    { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .cov-text   { font-size: 10px; color: var(--muted); }
+
+    /* Loading shimmer */
+    .shimmer { background: linear-gradient(90deg,#eee 25%,#f5f5f5 50%,#eee 75%);
+      background-size: 200% 100%; animation: shimmer 1.2s infinite;
+      border-radius: 3px; height: 10px; margin: 3px 0; }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+    /* ── Detail panel ── */
+    .detail-panel { margin: 0 1.5rem 1.5rem; background: var(--white);
+      border: 1px solid var(--border); border-radius: var(--radius-lg);
+      padding: 1.25rem; animation: slideIn .2s ease; }
+    @keyframes slideIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:none} }
+    .detail-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .detail-sector-badge { font-size: 11px; font-weight: 600; padding: 3px 10px;
+      border-radius: 20px; }
+    .detail-title { font-size: 16px; font-weight: 600; }
+    .detail-cov   { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 20px; }
+
+    .items-grid { display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 21px; }
+
+    /* Item card analytics */
+    .item-card {
+      background: #fafafa; border: 1px solid #000;
+      border-radius: var(--radius); padding: 10px 12px;
+    }
+    .item-name { font-size: 12px; font-weight: 600; color: var(--text);
+      margin-bottom: 6px; }
+    .item-scheda { font-size: 10px; color: #185FA5; text-decoration: none;
+      display: inline-block; margin-bottom: 8px; }
+    .item-scheda:hover { text-decoration: underline; }
+
+    /* Metriche nell'item card */
+    .item-metrics { display: flex; flex-direction: column; gap: 5px;
+      border-top: 1px solid var(--border); padding-top: 8px; }
+    .item-metric  { display: flex; justify-content: space-between; align-items: baseline; }
+    .item-metric-label { font-size: 10px; color: var(--muted); }
+    .item-metric-val   { font-size: 12px; font-weight: 600;
+      font-variant-numeric: tabular-nums; }
+    .item-metric-val.zero { color: var(--muted); font-weight: 400; }
+
+    /* Bar spark inside item card */
+    .item-bar-wrap { height: 3px; background: #eee; border-radius: 2px;
+      margin-top: 6px; overflow: hidden; }
+    .item-bar      { height: 100%; border-radius: 2px;
+      background: var(--red); transition: width .4s; }
+
+    .detail-actions { margin-top: 14px; display: flex; gap: 8px; }
+    .hidden { display: none !important; }
+
+    /* Totali colonna/riga nell'header */
+    .col-total { font-size: 10px; color: var(--muted); font-weight: 400;
+      display: block; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+
+<header class="topbar">
+  <span class="topbar-logo">4D Sistemi — Analytics</span>
+  <div class="topbar-right">
+    <span class="topbar-name" id="top-name"></span>
+    <a href="matrix.html" class="btn btn-secondary btn-sm">← Matrice</a>
+    <a id="admin-link" href="admin.html" class="btn btn-secondary btn-sm hidden">Admin</a>
+    <button class="btn-link" onclick="logout()">Esci</button>
+  </div>
+</header>
+
+<!-- Legend -->
+<div style="display:flex;gap:16px;padding:1rem 1.5rem 0;flex-wrap:wrap;
+  font-size:12px;color:var(--muted)">
+  <span>Settori:</span>
+  <span style="color:var(--sec-color)">● Security</span>
+  <span style="color:var(--con-color)">● Continuity</span>
+  <span style="color:var(--wor-color)">● Workplace</span>
+  <span style="color:var(--inf-color)">● Infrastructure</span>
+  <span style="color:var(--man-color)">● Management</span>
+  <span style="margin-left:8px;color:var(--muted)" id="last-update"></span>
+</div>
+
+<!-- Matrix -->
+<div class="matrix-wrap">
+  <table class="matrix-table" id="matrix-table">
+    <thead id="matrix-head"></thead>
+    <tbody id="matrix-body"></tbody>
+  </table>
+</div>
+
+<!-- Detail panel -->
+<div id="detail-panel" class="detail-panel hidden">
+  <div class="detail-header">
+    <span class="detail-sector-badge" id="d-sector-badge"></span>
+    <span class="detail-title" id="d-title"></span>
+    <span class="detail-cov" id="d-cov-badge"></span>
+  </div>
+  <div class="items-grid" id="d-items"></div>
+  <div class="detail-actions">
+    <button class="btn btn-secondary btn-sm" onclick="closeDetail()">Chiudi</button>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const sbMain = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
+// ── Fatture DB (REST diretto) ─────────────────────────────────
+const FAT_BASE = 'https://pjyrjcdnmxthpwxpywip.supabase.co/rest/v1'
+const FAT_KEY  = 'sb_publishable_iqrW_m5rY9_NX8C3_NPjNA_gXGBXBLt'
+const FAT_HDR  = { 'apikey': FAT_KEY, 'Authorization': 'Bearer ' + FAT_KEY }
+
+async function fatGet(path) {
+  const r = await fetch(FAT_BASE + path, { headers: FAT_HDR })
+  if (!r.ok) throw new Error('HTTP ' + r.status)
+  return r.json()
+}
+
+// ── Costanti matrice ──────────────────────────────────────────
+const SECTORS = [
+  { id:'sec', label:'Security',       sub:'Protezione dalle minacce esterne',         color:'var(--sec-color)', bg:'var(--sec-bg)' },
+  { id:'con', label:'Continuity',     sub:'Accessibilità ai dati garantita',           color:'var(--con-color)', bg:'var(--con-bg)' },
+  { id:'wor', label:'Workplace',      sub:'Strumenti per gli utenti',                  color:'var(--wor-color)', bg:'var(--wor-bg)' },
+  { id:'inf', label:'Infrastructure', sub:'Infrastrutture di collegamento e calcolo',  color:'var(--inf-color)', bg:'var(--inf-bg)' },
+  { id:'man', label:'Management',     sub:'Sistemi gestionali',                        color:'var(--man-color)', bg:'var(--man-bg)' },
+]
+const ACTIVITIES  = ['Consulenza','Progettazione','Fornitura / Produzione','Installazione','Manutenzione']
+const COV_COLORS  = { full:'var(--full)', partial:'var(--partial)', gap:'var(--gap)' }
+const COV_LABELS  = { full:'Copertura piena', partial:'Copertura parziale', gap:'Gap' }
+
+// ── State ─────────────────────────────────────────────────────
+let cells      = {}
+let cardIndex  = {}   // "cell_id:item_index" → card id
+let voceStats  = {}   // codice_4dm → { fatturato, n_fatture, n_clienti }
+let currentCell = null
+
+// ── Helpers ───────────────────────────────────────────────────
+function getCodice4dm(cell_id, item_index) {
+  const [sectorId, actIdxStr] = cell_id.split('-')
+  const actIdx    = parseInt(actIdxStr)
+  const rowNum    = ['sec','con','wor','inf','man'].indexOf(sectorId) + 1
+  const colLetter = String.fromCharCode('A'.charCodeAt(0) + actIdx)
+  const itemLetter= String.fromCharCode('a'.charCodeAt(0) + item_index)
+  return `${colLetter}${rowNum}${itemLetter}`
+}
+
+function fmtEur(n) {
+  if (!n || n === 0) return '—'
+  if (n >= 1000000) return '€ ' + (n/1000000).toFixed(1).replace('.',',') + 'M'
+  if (n >= 1000)    return '€ ' + Math.round(n/1000).toLocaleString('it-IT') + 'k'
+  return '€ ' + Math.round(n).toLocaleString('it-IT')
+}
+function fmtN(n) { return (!n || n === 0) ? '—' : n.toLocaleString('it-IT') }
+
+function toast(msg, type='success') {
+  const el = document.getElementById('toast')
+  el.textContent = msg; el.className = 'toast ' + type
+  setTimeout(() => el.className = 'toast hidden', 3000)
+}
+async function logout() { await sbMain.auth.signOut(); window.location.href = 'index.html' }
+
+// ── Init ──────────────────────────────────────────────────────
+async function init() {
+  const { data: { session } } = await sbMain.auth.getSession()
+  if (!session) { window.location.href = 'index.html'; return }
+
+  const { data: profile } = await sbMain.from('profiles')
+    .select('full_name,role').eq('id', session.user.id).single()
+
+  document.getElementById('top-name').textContent = profile?.full_name || session.user.email
+  if (profile?.role === 'admin') document.getElementById('admin-link').classList.remove('hidden')
+
+  // Carica celle matrice
+  const { data: dbCells } = await sbMain.from('matrix_cells').select('*')
+  if (dbCells) dbCells.forEach(c => { cells[c.id] = c })
+
+  // Carica indice schede pubblicate
+  const { data: dbCards } = await sbMain.from('catalog_cards')
+    .select('id,cell_id,item_index').eq('published', true)
+  if (dbCards) dbCards.forEach(c => { cardIndex[`${c.cell_id}:${c.item_index}`] = c.id })
+
+  // Render subito con shimmer, poi carica i numeri
+  renderMatrix()
+  loadVoceStats()
+}
+
+// ── Carica v_fatturato_voci ───────────────────────────────────
+async function loadVoceStats() {
+  try {
+    // Fetch paginata (per sicurezza)
+    let all = [], off = 0
+    while (true) {
+      const chunk = await fatGet(`/v_fatturato_voci?select=codice_4dm,fatturato,n_fatture,n_clienti&limit=1000&offset=${off}`)
+      if (!chunk || !chunk.length) break
+      all = all.concat(chunk)
+      if (chunk.length < 1000) break
+      off += 1000
+    }
+
+    voceStats = {}
+    all.forEach(r => { voceStats[r.codice_4dm] = r })
+
+    document.getElementById('last-update').textContent =
+      `Dati aggiornati — ${all.length} voci con fatturato`
+
+    // Aggiorna tutte le celle e le card già visibili
+    renderMatrix()
+    if (currentCell) renderDetailItems(currentCell)
+
+  } catch(e) {
+    console.warn('v_fatturato_voci non caricata:', e)
+    document.getElementById('last-update').textContent = 'Dati fatturato non disponibili'
+  }
+}
+
+// ── Render matrix ─────────────────────────────────────────────
+function renderMatrix() {
+  // Calcola totali per colonna (per header)
+  const colTotals = ACTIVITIES.map((_, actIdx) => {
+    return SECTORS.reduce((sum, s) => {
+      const cell = cells[`${s.id}-${actIdx}`]
+      if (!cell) return sum
+      return sum + (cell.items || []).reduce((s2, _, idx) => {
+        const cod = getCodice4dm(`${s.id}-${actIdx}`, idx)
+        return s2 + (voceStats[cod]?.fatturato || 0)
+      }, 0)
+    }, 0)
+  })
+
+  // Head
+  let head = '<tr><th class="sector-th">Settore</th>'
+  ACTIVITIES.forEach((a, i) => {
+    head += `<th>${a}${colTotals[i] > 0 ?
+      `<span class="col-total">${fmtEur(colTotals[i])}</span>` : ''}</th>`
+  })
+  head += '</tr>'
+  document.getElementById('matrix-head').innerHTML = head
+
+  // Body
+  let body = ''
+  SECTORS.forEach(s => {
+    body += `<tr>
+      <th class="sector-th" style="color:${s.color}">
+        ${s.label}<br>
+        <span style="font-size:10px;font-weight:400;color:var(--muted)">${s.sub}</span>
+      </th>`
+
+    for (let i = 0; i < 5; i++) {
+      const id   = `${s.id}-${i}`
+      const cell = cells[id]
+      if (!cell) { body += '<td></td>'; continue }
+
+      // Aggrega metriche cella
+      let totFat = 0, totFat_ = false, totN = 0, totC = 0
+      ;(cell.items || []).forEach((_, idx) => {
+        const cod  = getCodice4dm(id, idx)
+        const stat = voceStats[cod]
+        if (stat) {
+          totFat += stat.fatturato || 0
+          totN   += stat.n_fatture || 0
+          totC   += stat.n_clienti || 0
+          totFat_ = true
+        }
+      })
+
+      const covColor = COV_COLORS[cell.coverage]
+      const loading  = Object.keys(voceStats).length === 0
+
+      body += `<td>
+        <div class="matrix-cell" id="mc-${id}"
+             style="background:${s.bg}"
+             onclick="showDetail('${id}')">
+          <div class="cell-label" style="color:${s.color}">${cell.label}</div>
+          <div class="cell-metrics">
+            ${loading ? `
+              <div class="shimmer" style="width:90%"></div>
+              <div class="shimmer" style="width:70%"></div>
+              <div class="shimmer" style="width:80%"></div>
+            ` : `
+              <div class="cell-metric">
+                <span class="cell-metric-label">Fatturato</span>
+                <span class="cell-metric-val" style="color:${s.color}">${fmtEur(totFat)}</span>
+              </div>
+              <div class="cell-metric">
+                <span class="cell-metric-label">Fatture</span>
+                <span class="cell-metric-val">${fmtN(totN)}</span>
+              </div>
+              <div class="cell-metric">
+                <span class="cell-metric-label">Clienti</span>
+                <span class="cell-metric-val">${fmtN(totC)}</span>
+              </div>
+            `}
+          </div>
+          <div class="cell-cov">
+            <div class="cov-dot" style="background:${covColor}"></div>
+            <span class="cov-text">${COV_LABELS[cell.coverage]}</span>
+          </div>
+        </div>
+      </td>`
+    }
+    body += '</tr>'
+  })
+  document.getElementById('matrix-body').innerHTML = body
+}
+
+// ── Show detail ───────────────────────────────────────────────
+function showDetail(id) {
+  if (currentCell) document.getElementById('mc-' + currentCell)?.classList.remove('active')
+  currentCell = id
+  document.getElementById('mc-' + id)?.classList.add('active')
+
+  const cell   = cells[id]
+  const sector = SECTORS.find(s => id.startsWith(s.id))
+  const actIdx = parseInt(id.split('-')[1])
+
+  const sb_el  = document.getElementById('d-sector-badge')
+  sb_el.textContent  = sector.label
+  sb_el.style.background = sector.bg
+  sb_el.style.color  = sector.color
+
+  document.getElementById('d-title').textContent =
+    ACTIVITIES[actIdx] + ' — ' + cell.label
+
+  const cov = document.getElementById('d-cov-badge')
+  cov.textContent     = COV_LABELS[cell.coverage]
+  cov.style.background = cell.coverage==='full'?'#EAF3DE':cell.coverage==='partial'?'#FFF3CD':'#FCEBEB'
+  cov.style.color      = cell.coverage==='full'?'#3B6D11':cell.coverage==='partial'?'#856404':'#A32D2D'
+
+  renderDetailItems(id)
+
+  document.getElementById('detail-panel').classList.remove('hidden')
+  document.getElementById('detail-panel').scrollIntoView({ behavior:'smooth', block:'nearest' })
+}
+
+function renderDetailItems(id) {
+  const cell = cells[id]
+  if (!cell) return
+
+  // Calcola max fatturato tra le voci per la barra proporzionale
+  const maxFat = Math.max(...(cell.items || []).map((_, idx) => {
+    const cod = getCodice4dm(id, idx)
+    return voceStats[cod]?.fatturato || 0
+  }), 1)
+
+  document.getElementById('d-items').innerHTML = (cell.items || []).map((it, idx) => {
+    const cod      = getCodice4dm(id, idx)
+    const stat     = voceStats[cod]
+    const cardKey  = `${id}:${idx}`
+    const cardLink = cardIndex[cardKey]
+      ? `<a href="scheda.html?id=${cardIndex[cardKey]}" target="_blank" class="item-scheda">
+           📄 Scheda 4DM
+         </a>`
+      : ''
+    const fat  = stat?.fatturato  || 0
+    const nFat = stat?.n_fatture  || 0
+    const nCli = stat?.n_clienti  || 0
+    const barW = fat > 0 ? Math.round(fat / maxFat * 100) : 0
+
+    return `<div class="item-card">
+      <div class="item-name">${it.n}</div>
+      ${cardLink}
+      <div class="item-metrics">
+        <div class="item-metric">
+          <span class="item-metric-label">Fatturato</span>
+          <span class="item-metric-val ${fat===0?'zero':''}">${fmtEur(fat)}</span>
+        </div>
+        <div class="item-metric">
+          <span class="item-metric-label">N. fatture</span>
+          <span class="item-metric-val ${nFat===0?'zero':''}">${fmtN(nFat)}</span>
+        </div>
+        <div class="item-metric">
+          <span class="item-metric-label">N. clienti</span>
+          <span class="item-metric-val ${nCli===0?'zero':''}">${fmtN(nCli)}</span>
+        </div>
+      </div>
+      <div class="item-bar-wrap">
+        <div class="item-bar" style="width:${barW}%"></div>
+      </div>
+    </div>`
+  }).join('')
+}
+
+function closeDetail() {
+  document.getElementById('detail-panel').classList.add('hidden')
+  if (currentCell) document.getElementById('mc-' + currentCell)?.classList.remove('active')
+  currentCell = null
+}
+
+init()
+</script>
+</body>
+</html>
