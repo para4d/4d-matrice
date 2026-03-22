@@ -275,31 +275,66 @@ async function syncCatalog() {
     })
     dlog(`  ✓ ${newCatalog.length} voci calcolate dalla matrice`, 'lok')
 
-    // 3. Ricostruzione completa: cancella tutto e reinserisce
-    dlog('▶ Cancellazione catalogo_4dm esistente...')
-    // Cancella tutti i record (filtro always-true su chiave primaria)
-    const delAll = await fetch(FAT_BASE + '/catalogo_4dm?codice_4dm=like.*', {
-      method: 'DELETE', headers: FAT_HDR
-    })
-    if (!delAll.ok) { const t = await delAll.text(); throw new Error('DELETE ALL: ' + t) }
-    dlog('  ✓ Catalogo svuotato', 'lok')
+    // 3. Carica catalogo attuale per sapere quali codici esistono già
+    dlog('▶ Lettura codici esistenti in catalogo_4dm...')
+    const existing = await fatGet('/catalogo_4dm?select=codice_4dm')
+    const existingCodes = new Set(existing.map(r => r.codice_4dm))
+    const newCodes      = new Set(newCatalog.map(r => r.codice_4dm))
+    dlog(`  ✓ ${existingCodes.size} codici esistenti`, 'lok')
 
-    // 4. Inserisce tutti i record in batch da 50
-    dlog(`▶ Inserimento ${newCatalog.length} record...`)
-    const BATCH = 50
-    for (let i = 0; i < newCatalog.length; i += BATCH) {
-      const batch = newCatalog.slice(i, i + BATCH)
-      const r = await fetch(FAT_BASE + '/catalogo_4dm', {
-        method: 'POST',
-        headers: { ...FAT_HDR, 'Prefer': 'return=minimal' },
-        body: JSON.stringify(batch)
-      })
-      if (!r.ok) { const t = await r.text(); throw new Error(`INSERT batch ${i}-${i+BATCH}: ${t}`) }
-      dlog(`  ✓ Inseriti ${i + batch.length}/${newCatalog.length}`, 'lok')
+    const toInsert  = newCatalog.filter(r => !existingCodes.has(r.codice_4dm))
+    const toUpdate  = newCatalog.filter(r =>  existingCodes.has(r.codice_4dm))
+    const toDelete  = [...existingCodes].filter(c => !newCodes.has(c))
+    dlog(`  Nuovi: ${toInsert.length} | Da aggiornare: ${toUpdate.length} | Obsoleti: ${toDelete.length}`)
+
+    // 4. Aggiorna i record esistenti (PATCH — non tocca il codice, aggiorna i campi)
+    if (toUpdate.length > 0) {
+      dlog(`▶ Aggiornamento ${toUpdate.length} record esistenti...`)
+      for (const r of toUpdate) {
+        await fatPatch(
+          `/catalogo_4dm?codice_4dm=eq.${encodeURIComponent(r.codice_4dm)}`,
+          { settore: r.settore, numero_colonna: r.numero_colonna,
+            attivita: r.attivita, cella: r.cella,
+            titolo: r.titolo, descrizione_voce: r.descrizione_voce }
+        )
+      }
+      dlog(`  ✓ ${toUpdate.length} record aggiornati`, 'lok')
+    }
+
+    // 5. Inserisce nuovi codici
+    if (toInsert.length > 0) {
+      dlog(`▶ Inserimento ${toInsert.length} nuovi record...`)
+      const BATCH = 50
+      for (let i = 0; i < toInsert.length; i += BATCH) {
+        const batch = toInsert.slice(i, i + BATCH)
+        const r = await fetch(FAT_BASE + '/catalogo_4dm', {
+          method: 'POST',
+          headers: { ...FAT_HDR, 'Prefer': 'return=minimal' },
+          body: JSON.stringify(batch)
+        })
+        if (!r.ok) { const t = await r.text(); throw new Error(`INSERT: ${t}`) }
+      }
+      dlog(`  ✓ ${toInsert.length} nuovi record inseriti`, 'lok')
+    }
+
+    // 6. Gestisce codici obsoleti:
+    //    prima cancella i mapping che li referenziano, poi cancella dal catalogo
+    if (toDelete.length > 0) {
+      dlog(`▶ Rimozione ${toDelete.length} codici obsoleti...`)
+      for (const cod of toDelete) {
+        // Cancella prima i mapping orfani
+        await fetch(FAT_BASE + `/mapping_articoli_4dm?codice_4dm=eq.${encodeURIComponent(cod)}`,
+          { method: 'DELETE', headers: FAT_HDR })
+        // Poi cancella dal catalogo
+        await fetch(FAT_BASE + `/catalogo_4dm?codice_4dm=eq.${encodeURIComponent(cod)}`,
+          { method: 'DELETE', headers: FAT_HDR })
+        dlog(`  ✓ rimosso ${cod} (e relativi mapping)`, 'lok')
+      }
     }
 
     dlog('', '')
-    dlog(`✅ Catalogo ricostruito: ${newCatalog.length} voci`, 'lok')
+    dlog(`✅ Catalogo sincronizzato correttamente!`, 'lok')
+    dlog(`   +${toInsert.length} inseriti · ~${toUpdate.length} aggiornati · -${toDelete.length} obsoleti rimossi`, 'lok')
 
     // 6. Ricarica i dati per aggiornare i dropdown
     dlog('  Ricaricamento dati...', '')
