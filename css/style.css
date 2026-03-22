@@ -98,10 +98,10 @@ textarea { resize: vertical; min-height: 80px; }
 
 .matrix-cell {
   border-radius: var(--radius); padding: 10px 12px; cursor: pointer;
-  border: 1.5px solid transparent; transition: border-color .15s, transform .1s, box-shadow .4s;
+  border: 1px solid #000; transition: border-color .15s, transform .1s, box-shadow .4s;
   min-width: 120px;
 }
-.matrix-cell:hover { transform: translateY(-1px); border-color: rgba(0,0,0,.12); }
+.matrix-cell:hover { transform: translateY(-1px); }
 .matrix-cell.active { border-width: 2px; }
 
 .cell-label { font-size: 11px; font-weight: 600; margin-bottom: 6px; }
@@ -126,7 +126,7 @@ textarea { resize: vertical; min-height: 80px; }
 .detail-cov   { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 20px; }
 .items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 21px; }
 .item-card {
-  background: #fafafa; border: 1px solid var(--border);
+  background: #fafafa; border: 1px solid #000;
   border-radius: var(--radius); padding: 10px 12px;
   transition: box-shadow .4s;
 }
