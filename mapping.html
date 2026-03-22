@@ -236,11 +236,18 @@ async function loadAll() {
     catalog = await fatGet('/catalogo_4dm?select=*&order=codice_4dm')
     dlog(`✓ ${catalog.length} voci`, 'lok')
 
-    dlog('▶ Caricamento mapping esistente...')
-    const mapData = await fatGet('/mapping_articoli_4dm?select=codice_articolo,codice_4dm')
+    dlog('▶ Caricamento mapping esistente (paginato)...')
+    let mapData = [], mapOff = 0
+    while (true) {
+      const chunk = await fatGet(`/mapping_articoli_4dm?select=codice_articolo,codice_4dm&limit=1000&offset=${mapOff}`)
+      if (!chunk || !chunk.length) break
+      mapData = mapData.concat(chunk)
+      if (chunk.length < 1000) break
+      mapOff += 1000
+    }
     currentMap = {}
     mapData.forEach(m => { currentMap[m.codice_articolo] = m.codice_4dm })
-    dlog(`✓ ${mapData.length} mapping`, 'lok')
+    dlog(`✓ ${mapData.length} mapping totali caricati`, 'lok')
 
     dlog('▶ Caricamento righe_fatture (paginato)...')
     let rows = [], off = 0
