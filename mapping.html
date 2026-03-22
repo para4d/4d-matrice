@@ -575,15 +575,16 @@ async function init() {
 }
 
 // Event delegation: un solo listener sul tbody
-let _saving = false  // guard contro doppio click
+const _savingSet = new Set()  // guard per codice articolo
 document.getElementById('tbody').addEventListener('click', function(e) {
   const btn = e.target.closest('.save-btn')
   if (!btn || btn.disabled) return
   const art = btn.dataset.art
-  if (!art || _saving) return
-  _saving = true
+  if (!art || _savingSet.has(art)) { dlog(`⚠ click ignorato per "${art}" (già in salvataggio)`); return }
+  _savingSet.add(art)
   btn.disabled = true
-  saveRow(art).finally(() => { _saving = false })
+  dlog(`▶ click intercettato per "${art}"`)
+  saveRow(art).finally(() => { _savingSet.delete(art) })
 })
 
 // Attiva indicatore ordinamento iniziale (importo desc)
