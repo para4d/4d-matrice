@@ -569,18 +569,18 @@ function toast(msg, type = 'success') {
 }
 
 // ── Init ──────────────────────────────────────────────────────
-async function // Event delegation: cattura i click sui save-btn senza onclick inline
+async function init() {
+  const ok = await initAuth()
+  if (ok) loadAll()
+}
+
+// Event delegation: cattura i click sui save-btn senza onclick inline
 document.getElementById('tbody').addEventListener('click', function(e) {
   const btn = e.target.closest('.save-btn')
   if (!btn || btn.disabled) return
   const art = btn.dataset.art
   if (art) saveRow(art)
 })
-
-init() {
-  const ok = await initAuth()
-  if (ok) loadAll()
-}
 
 // Attiva indicatore ordinamento iniziale (importo desc)
 document.addEventListener('DOMContentLoaded', () => {
