@@ -203,10 +203,12 @@ async function fatPost(path, body) {
     method: 'POST', headers: { ...FAT_HDR, 'Prefer': 'return=minimal' },
     body: JSON.stringify(body)
   })
+  dlog(`  POST ${path} → HTTP ${r.status}`)
   if (!r.ok) { const t = await r.text(); throw new Error('POST ' + r.status + ': ' + t) }
 }
 async function fatDelete(path) {
   const r = await fetch(FAT_BASE + path, { method: 'DELETE', headers: FAT_HDR })
+  dlog(`  DELETE ${path} → HTTP ${r.status}`)
   if (!r.ok) { const t = await r.text(); throw new Error('DELETE ' + r.status + ': ' + t) }
 }
 
@@ -413,8 +415,8 @@ function renderTable() {
       <td class="tr">${r.n_righe.toLocaleString('it-IT')}</td>
       <td class="ti">${fmt(r.importo)}</td>
       <td class="badge-cell">${pill} <span class="badge-map ${bCls}">${bTxt}</span></td>
-      <td><select class="${sCls}" onchange="onSel(this, '${r.codice_articolo}')">${buildOptions(cur)}</select></td>
-      <td><button class="save-btn" onclick="saveRow('${r.codice_articolo}')" ${!changed ? 'disabled' : ''}>${changed ? 'Salva' : '✓'}</button></td>
+      <td><select class="${sCls}" data-art="${r.codice_articolo}" onchange="onSelEvt(event)">${buildOptions(cur)}</select></td>
+      <td><button class="save-btn" data-art="${r.codice_articolo}" ${!changed ? 'disabled' : ''}>${changed ? 'Salva' : '✓'}</button></td>
     </tr>`
   }).join('')
 }
@@ -430,6 +432,13 @@ function renderPagination() {
 function goPage(p) { page = p; renderTable(); renderPagination(); window.scrollTo(0, 0) }
 
 // ── Select change ─────────────────────────────────────────────
+function onSelEvt(event) {
+  const el = event.target
+  const art = el.dataset.art
+  if (!art) return
+  onSel(el, art)
+}
+
 function onSel(el, art) {
   const val = el.value
   if (val === (currentMap[art] || '')) delete pendingMap[art]
@@ -560,7 +569,15 @@ function toast(msg, type = 'success') {
 }
 
 // ── Init ──────────────────────────────────────────────────────
-async function init() {
+async function // Event delegation: cattura i click sui save-btn senza onclick inline
+document.getElementById('tbody').addEventListener('click', function(e) {
+  const btn = e.target.closest('.save-btn')
+  if (!btn || btn.disabled) return
+  const art = btn.dataset.art
+  if (art) saveRow(art)
+})
+
+init() {
   const ok = await initAuth()
   if (ok) loadAll()
 }
@@ -569,6 +586,14 @@ async function init() {
 document.addEventListener('DOMContentLoaded', () => {
   const th = document.getElementById('th-importo')
   if (th) th.classList.add('sort-desc')
+})
+
+// Event delegation: cattura i click sui save-btn senza onclick inline
+document.getElementById('tbody').addEventListener('click', function(e) {
+  const btn = e.target.closest('.save-btn')
+  if (!btn || btn.disabled) return
+  const art = btn.dataset.art
+  if (art) saveRow(art)
 })
 
 init()
