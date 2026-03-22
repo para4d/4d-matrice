@@ -467,40 +467,52 @@ async function upsertOne(art, cod) {
   await fatPost('/mapping_articoli_4dm', { codice_articolo: art, codice_4dm: cod })
 }
 
+function showLog() { document.getElementById('dbg').classList.remove('hidden') }
+
 async function verifyRow(art, expectedCod) {
-  // Legge la riga appena scritta per confermare la persistenza
   const enc = encodeURIComponent(art)
+  dlog(`  → verifica lettura DB per "${art}"...`)
   const data = await fatGet(`/mapping_articoli_4dm?codice_articolo=eq.${enc}&select=codice_4dm`)
+  dlog(`  → risposta DB: ${JSON.stringify(data)}`)
   if (expectedCod === '') {
-    // Ci aspettiamo nessuna riga
-    if (data && data.length > 0) throw new Error(`Verifica fallita: la riga esiste ancora dopo la cancellazione (RLS potrebbe bloccare le write)`)
+    if (data && data.length > 0)
+      throw new Error(`RLS blocca le DELETE: la riga esiste ancora dopo la cancellazione`)
+    dlog(`  ✓ cancellazione confermata`, 'lok')
   } else {
-    // Ci aspettiamo esattamente la riga con il codice salvato
-    if (!data || data.length === 0) throw new Error(`Verifica fallita: nessuna riga trovata dopo il salvataggio (RLS potrebbe bloccare le write)`)
-    if (data[0].codice_4dm !== expectedCod) throw new Error(`Verifica fallita: atteso "${expectedCod}", trovato "${data[0].codice_4dm}"`)
+    if (!data || data.length === 0)
+      throw new Error(`RLS blocca le write: nessuna riga trovata dopo il salvataggio`)
+    if (data[0].codice_4dm !== expectedCod)
+      throw new Error(`Mismatch: atteso "${expectedCod}", trovato "${data[0].codice_4dm}"`)
+    dlog(`  ✓ scrittura confermata: ${art} → ${data[0].codice_4dm}`, 'lok')
   }
 }
 
 async function saveRow(art) {
   const pend = pendingMap[art]
   if (pend === undefined) return
+  showLog()
+  dlog(`▶ saveRow: "${art}" → "${pend}"`)
   try {
+    const enc = encodeURIComponent(art)
     if (pend === '') {
-      await fatDelete(`/mapping_articoli_4dm?codice_articolo=eq.${encodeURIComponent(art)}`)
+      dlog(`  DELETE mapping_articoli_4dm?codice_articolo=eq.${art}`)
+      await fatDelete(`/mapping_articoli_4dm?codice_articolo=eq.${enc}`)
+      dlog(`  DELETE completato`)
     } else {
-      await upsertOne(art, pend)
+      dlog(`  DELETE precedenti per "${art}"...`)
+      await fatDelete(`/mapping_articoli_4dm?codice_articolo=eq.${enc}`)
+      dlog(`  POST {codice_articolo: "${art}", codice_4dm: "${pend}"}`)
+      await fatPost('/mapping_articoli_4dm', { codice_articolo: art, codice_4dm: pend })
+      dlog(`  POST completato`)
     }
-    // Verifica che la scrittura sia stata effettivamente persistita
     await verifyRow(art, pend)
-    // Solo se la verifica passa aggiorniamo lo stato locale
-    if (pend === '') delete currentMap[art]
-    else currentMap[art] = pend
+    if (pend === '') delete currentMap[art]; else currentMap[art] = pend
     delete pendingMap[art]
     updateSaveAllBtn(); renderStats(); renderTable(); renderPagination()
+    dlog(`✓ saveRow completato per "${art}"`, 'lok')
     toast(`Mapping "${art}" salvato e verificato.`)
   } catch(e) {
-    dlog('✗ saveRow: ' + e.message, 'lerr')
-    document.getElementById('dbg').classList.remove('hidden')
+    dlog('✗ saveRow ERRORE: ' + e.message, 'lerr')
     toast('Errore: ' + e.message, 'error')
   }
 }
