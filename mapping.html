@@ -284,7 +284,8 @@ async function syncCatalog() {
 
     const toInsert  = newCatalog.filter(r => !existingCodes.has(r.codice_4dm))
     const toUpdate  = newCatalog.filter(r =>  existingCodes.has(r.codice_4dm))
-    const toDelete  = [...existingCodes].filter(c => !newCodes.has(c))
+    // Esclude i codici Z (voci speciali KPI non derivate dalla matrice)
+    const toDelete  = [...existingCodes].filter(c => !newCodes.has(c) && !c.startsWith('Z'))
     dlog(`  Nuovi: ${toInsert.length} | Da aggiornare: ${toUpdate.length} | Obsoleti: ${toDelete.length}`)
 
     // 4. Aggiorna i record esistenti (PATCH — non tocca il codice, aggiorna i campi)
@@ -378,7 +379,7 @@ async function loadAll() {
       const chunk = await fatGet(`/righe_fatture?select=codice_articolo,descrizione_breve,importo&limit=1000&offset=${off}`)
       if (!chunk || !chunk.length) break
       rows = rows.concat(chunk)
-      document.getElementById('load-status').textContent = `Righe: ${rows.length.toLocaleString('it-IT')}`
+      const _ls=document.getElementById('load-status'); if(_ls) _ls.textContent = `Righe: ${rows.length.toLocaleString('it-IT')}`
       if (chunk.length < 1000) break
       off += 1000
     }
@@ -405,8 +406,7 @@ async function loadAll() {
   } catch(e) {
     dlog('✗ ERRORE: ' + e.message, 'lerr')
     document.getElementById('dbg').classList.remove('hidden')
-    document.getElementById('load-status').textContent = 'Errore — vedi log'
-    document.getElementById('load-status').style.color = 'var(--gap)'
+    const _lse=document.getElementById('load-status'); if(_lse){_lse.textContent='Errore — vedi log';_lse.style.color='var(--gap)'}
   }
 }
 
