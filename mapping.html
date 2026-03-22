@@ -457,11 +457,10 @@ function updateSaveAllBtn() {
 // ── Save (PATCH se esiste, POST se nuovo) ─────────────────────
 async function upsertOne(art, cod) {
   const enc = encodeURIComponent(art)
-  if (currentMap[art] !== undefined) {
-    await fatPatch(`/mapping_articoli_4dm?codice_articolo=eq.${enc}`, { codice_4dm: cod })
-  } else {
-    await fatPost('/mapping_articoli_4dm', { codice_articolo: art, codice_4dm: cod })
-  }
+  // Elimina sempre tutti i mapping esistenti per quell'articolo, poi inserisce il nuovo
+  // (evita il 409 sul constraint unico su codice_articolo+codice_4dm)
+  await fatDelete(`/mapping_articoli_4dm?codice_articolo=eq.${enc}`)
+  await fatPost('/mapping_articoli_4dm', { codice_articolo: art, codice_4dm: cod })
 }
 
 async function saveRow(art) {
