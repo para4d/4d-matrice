@@ -226,14 +226,17 @@ function borderThickness(count) {
   return Math.min(10, Math.log2(count + 1))
 }
 
-// Colore bordo: bianco→rosso basato sulla distanza dalla media
+// Colore bordo: grigio neutro→rosso basato sulla distanza dalla media.
+// Parte da grigio (160,160,160) così non coincide mai con gli sfondi pastello delle celle.
 // ratio = importo / (2 * media) → capped a [0,1]
-// 0 = bianco, media = rosa, 2×media = rosso pieno
+// 0 = grigio medio, media = rosa-rosso, 2×media = rosso pieno
 function borderColor(importo, mean) {
-  if (mean === 0) return 'rgb(255,255,255)'
+  if (mean === 0) return 'rgb(160,160,160)'
   const ratio = Math.min(1, importo / (mean * 2))
-  const g = Math.round(255 * (1 - ratio))
-  return `rgb(255,${g},${g})`
+  const r = Math.round(160 + 95 * ratio)          // 160 → 255
+  const g = Math.round(160 * (1 - ratio))          // 160 → 0
+  const b = Math.round(160 * (1 - ratio))          // 160 → 0
+  return `rgb(${r},${g},${b})`
 }
 
 // Applica box-shadow ai .matrix-cell (cards della matrice)
