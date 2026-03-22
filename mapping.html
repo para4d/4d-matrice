@@ -574,26 +574,22 @@ async function init() {
   if (ok) loadAll()
 }
 
-// Event delegation: cattura i click sui save-btn senza onclick inline
+// Event delegation: un solo listener sul tbody
+let _saving = false  // guard contro doppio click
 document.getElementById('tbody').addEventListener('click', function(e) {
   const btn = e.target.closest('.save-btn')
   if (!btn || btn.disabled) return
   const art = btn.dataset.art
-  if (art) saveRow(art)
+  if (!art || _saving) return
+  _saving = true
+  btn.disabled = true
+  saveRow(art).finally(() => { _saving = false })
 })
 
 // Attiva indicatore ordinamento iniziale (importo desc)
 document.addEventListener('DOMContentLoaded', () => {
   const th = document.getElementById('th-importo')
   if (th) th.classList.add('sort-desc')
-})
-
-// Event delegation: cattura i click sui save-btn senza onclick inline
-document.getElementById('tbody').addEventListener('click', function(e) {
-  const btn = e.target.closest('.save-btn')
-  if (!btn || btn.disabled) return
-  const art = btn.dataset.art
-  if (art) saveRow(art)
 })
 
 init()
