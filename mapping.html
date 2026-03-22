@@ -126,6 +126,10 @@
     <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Reimposta</button>
     <button class="btn btn-secondary btn-sm"
       onclick="document.getElementById('dbg').classList.toggle('hidden')">Log</button>
+    <button class="btn btn-secondary btn-sm" id="sync-btn" onclick="syncCatalog()"
+      title="Rigenera catalogo_4dm leggendo matrix_cells">
+      🔄 Sincronizza catalogo
+    </button>
     <span style="margin-left:auto;font-size:12px;color:var(--muted)" id="f-count"></span>
     <span id="changes-badge" style="font-size:12px;color:var(--muted)"></span>
     <button class="btn btn-primary btn-sm" id="save-all-btn" onclick="saveAll()" disabled>
@@ -226,6 +230,132 @@ function dlog(msg, cls='') {
 }
 
 // ── Load ──────────────────────────────────────────────────────
+// ── Sincronizza catalogo_4dm da matrix_cells ─────────────────
+// Legge la matrice corretta dal DB principale e riscrive catalogo_4dm
+// nel DB fatture con i codici aggiornati.
+async function syncCatalog() {
+  const btn = document.getElementById('sync-btn')
+  btn.disabled = true
+  btn.textContent = '⏳ Sincronizzazione...'
+  showLog()
+  dlog('▶ Inizio sincronizzazione catalogo_4dm...')
+
+  try {
+    // 1. Legge matrix_cells dal DB principale (Supabase matrice)
+    dlog('  Lettura matrix_cells...')
+    const { data: dbCells, error: cellErr } = await sbMain.from('matrix_cells').select('*')
+    if (cellErr) throw new Error('matrix_cells: ' + cellErr.message)
+    dlog(`  ✓ ${dbCells.length} celle lette`, 'lok')
+
+    // 2. Costruisce l'array completo dei record per catalogo_4dm
+    const SECTOR_MAP = { sec:1, con:2, wor:3, inf:4, man:5 }
+    const SECTOR_LABELS = { sec:'Security', con:'Continuity', wor:'Workplace', inf:'Infrastructure', man:'Management' }
+    const ACT_LABELS = ['Consulenza','Progettazione','Fornitura / Produzione','Installazione','Manutenzione']
+
+    const newCatalog = []
+    dbCells.forEach(cell => {
+      const [sectorId, actIdxStr] = cell.id.split('-')
+      const actIdx   = parseInt(actIdxStr)
+      const rowNum   = SECTOR_MAP[sectorId]
+      const colLetter = String.fromCharCode(65 + actIdx)
+      ;(cell.items || []).forEach((item, idx) => {
+        const itemLetter = String.fromCharCode(97 + idx)
+        newCatalog.push({
+          codice_4dm:      colLetter + rowNum + itemLetter,
+          settore:         SECTOR_LABELS[sectorId],
+          numero_colonna:  actIdx + 1,
+          attivita:        ACT_LABELS[actIdx],
+          cella_titolo:    cell.label,
+          descrizione_voce: item.n,
+        })
+      })
+    })
+    dlog(`  ✓ ${newCatalog.length} voci calcolate dalla matrice`, 'lok')
+
+    // 3. Legge catalogo_4dm attuale nel DB fatture
+    dlog('  Lettura catalogo_4dm attuale...')
+    const existing = await fatGet('/catalogo_4dm?select=codice_4dm,descrizione_voce')
+    const existingMap = {}
+    existing.forEach(r => { existingMap[r.codice_4dm] = r.descrizione_voce })
+    dlog(`  ✓ ${existing.length} record esistenti`, 'lok')
+
+    // 4. Confronta e individua differenze
+    const toInsert = []
+    const toUpdate = []
+    const newCodes  = new Set(newCatalog.map(r => r.codice_4dm))
+
+    newCatalog.forEach(r => {
+      if (!existingMap.hasOwnProperty(r.codice_4dm)) {
+        toInsert.push(r)
+      } else if (existingMap[r.codice_4dm] !== r.descrizione_voce) {
+        toUpdate.push(r)
+      }
+    })
+
+    // Codici nel DB che non esistono più nella matrice
+    const toDelete = existing
+      .filter(r => !newCodes.has(r.codice_4dm))
+      .map(r => r.codice_4dm)
+
+    dlog(`  Inserimenti: ${toInsert.length} | Aggiornamenti: ${toUpdate.length} | Cancellazioni: ${toDelete.length}`)
+
+    if (toInsert.length === 0 && toUpdate.length === 0 && toDelete.length === 0) {
+      dlog('✓ Catalogo già sincronizzato — nessuna modifica necessaria.', 'lok')
+      btn.disabled = false; btn.textContent = '🔄 Sincronizza catalogo'
+      return
+    }
+
+    // 5. Esegui le modifiche
+    // INSERT nuovi
+    if (toInsert.length > 0) {
+      dlog(`▶ Inserimento ${toInsert.length} nuovi record...`)
+      const r = await fetch(FAT_BASE + '/catalogo_4dm', {
+        method: 'POST',
+        headers: { ...FAT_HDR, 'Prefer': 'return=minimal' },
+        body: JSON.stringify(toInsert)
+      })
+      if (!r.ok) { const t = await r.text(); throw new Error('INSERT: ' + t) }
+      dlog(`  ✓ Inseriti ${toInsert.length} record`, 'lok')
+    }
+
+    // UPDATE esistenti
+    for (const r of toUpdate) {
+      await fatPatch(
+        `/catalogo_4dm?codice_4dm=eq.${encodeURIComponent(r.codice_4dm)}`,
+        { settore: r.settore, numero_colonna: r.numero_colonna,
+          attivita: r.attivita, cella_titolo: r.cella_titolo,
+          descrizione_voce: r.descrizione_voce }
+      )
+      dlog(`  ✓ Aggiornato ${r.codice_4dm}: "${r.descrizione_voce}"`, 'lok')
+    }
+
+    // DELETE obsoleti (codici non più presenti nella matrice)
+    for (const cod of toDelete) {
+      const r2 = await fetch(
+        FAT_BASE + `/catalogo_4dm?codice_4dm=eq.${encodeURIComponent(cod)}`,
+        { method: 'DELETE', headers: FAT_HDR }
+      )
+      if (!r2.ok) dlog(`  ⚠ DELETE ${cod} fallito`, 'lerr')
+      else dlog(`  ✓ Cancellato ${cod} (non più in matrice)`, 'lok')
+    }
+
+    dlog('', '')
+    dlog(`✅ Sincronizzazione completata!`, 'lok')
+    dlog(`   +${toInsert.length} inseriti · ~${toUpdate.length} aggiornati · -${toDelete.length} cancellati`, 'lok')
+
+    // 6. Ricarica i dati per aggiornare i dropdown
+    dlog('  Ricaricamento dati...', '')
+    await loadAll()
+
+  } catch(e) {
+    dlog('✗ ERRORE: ' + e.message, 'lerr')
+    toast('Errore sincronizzazione: ' + e.message, 'error')
+  }
+
+  btn.disabled = false
+  btn.textContent = '🔄 Sincronizza catalogo'
+}
+
 async function loadAll() {
   try {
     dlog('▶ Test connessione DB fatture...')
