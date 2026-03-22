@@ -282,10 +282,12 @@ async function loadAll() {
 function renderStats() {
   const tR = allRighe.reduce((a, r) => a + r.n_righe, 0)
   const tI = allRighe.reduce((a, r) => a + r.importo, 0)
-  const mapped = allRighe.filter(r => {
+  const unmappedRighe = allRighe.filter(r => {
     const p = pendingMap[r.codice_articolo]
-    return p !== undefined ? p !== '' : !!currentMap[r.codice_articolo]
-  }).length
+    return p !== undefined ? p === '' : !currentMap[r.codice_articolo]
+  })
+  const mapped = allRighe.length - unmappedRighe.length
+  const fatNonMappato = unmappedRighe.reduce((a, r) => a + r.importo, 0)
   document.getElementById('map-stats').innerHTML = `
     <div class="map-stat"><div class="map-stat-label">Codici articolo</div>
       <div class="map-stat-val">${allRighe.length}</div></div>
@@ -296,7 +298,9 @@ function renderStats() {
     <div class="map-stat"><div class="map-stat-label">Mappati</div>
       <div class="map-stat-val" style="color:var(--con-color)">${mapped}</div></div>
     <div class="map-stat"><div class="map-stat-label">Non mappati</div>
-      <div class="map-stat-val" style="color:var(--gap)">${allRighe.length - mapped}</div></div>`
+      <div class="map-stat-val" style="color:var(--gap)">${unmappedRighe.length}</div></div>
+    <div class="map-stat"><div class="map-stat-label">Fatturato non mappato</div>
+      <div class="map-stat-val" style="font-size:15px;color:var(--gap)">${fmt(fatNonMappato)}</div></div>`
 }
 
 // ── Sort ──────────────────────────────────────────────────────
