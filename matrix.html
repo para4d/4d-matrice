@@ -339,7 +339,8 @@ async function loadFatturatoData() {
     })
     _cellFatt = cellAgg
 
-    // 5. Applica ai .matrix-cell già renderizzati
+    // 5. Ri-renderizza la matrice con i totali e applica i bordi
+    renderMatrix()
     applyMatrixCellBorders()
 
   } catch(e) {
@@ -379,20 +380,42 @@ async function init() {
   loadFatturatoData()  // bordi fatturato (asincrono, non blocca la UI)
 }
 
+function fmtEur(n) {
+  if (!n || n === 0) return null
+  if (n >= 1000000) return '€ ' + (n/1000000).toFixed(1).replace('.',',') + 'M'
+  if (n >= 1000)    return '€ ' + Math.round(n/1000).toLocaleString('it-IT') + 'k'
+  return '€ ' + Math.round(n).toLocaleString('it-IT')
+}
+
 function renderMatrix() {
-  // head
+  const hasFat = Object.keys(_cellFatt).length > 0
+
+  // Totali per colonna (attività)
+  const colTotals = ACTIVITIES.map((_, ai) =>
+    SECTORS.reduce((sum, s) => sum + (_cellFatt[s.id+'-'+ai]?.importo || 0), 0)
+  )
+
+  // head con totali colonna
   let head = '<tr><th class="sector-th">Settore</th>'
-  ACTIVITIES.forEach(a => head += `<th>${a}</th>`)
+  ACTIVITIES.forEach((a, i) => {
+    const t = hasFat && colTotals[i] > 0 ? fmtEur(colTotals[i]) : null
+    head += `<th>${a}${t ? `<span style="display:block;font-size:10px;font-weight:400;color:var(--muted);margin-top:2px">${t}</span>` : ''}</th>`
+  })
   head += '</tr>'
   document.getElementById('matrix-head').innerHTML = head
 
   // body
   let body = ''
   SECTORS.forEach(s => {
+    // Totale riga per settore
+    const rowTot = ACTIVITIES.reduce((sum, _, ai) => sum + (_cellFatt[s.id+'-'+ai]?.importo || 0), 0)
+    const rowTotStr = hasFat && rowTot > 0 ? fmtEur(rowTot) : null
+
     body += `<tr>
       <th class="sector-th" style="color:${s.color}">
         ${s.label}<br>
         <span style="font-size:10px;font-weight:400;color:var(--muted)">${s.sub}</span>
+        ${rowTotStr ? `<div style="font-size:11px;font-weight:600;margin-top:4px;color:${s.color}">${rowTotStr}</div>` : ''}
       </th>`
     for (let i = 0; i < 5; i++) {
       const id = `${s.id}-${i}`
