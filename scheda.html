@@ -76,6 +76,10 @@
     }
 
     /* ── Title block ─────────────────────────────────────────── */
+    .card-id-mp32 {
+      font-size: 8pt; font-family: monospace; letter-spacing: .15em;
+      color: #999; margin: 0 0 1mm 0; display: block;
+    }
     .card-title {
       font-size: 26pt; font-weight: 700; color: #1A1A1A;
       line-height: 1.1; margin: 0 0 2mm 0;
@@ -208,6 +212,7 @@
     <div class="sector-pill" id="card-sector-pill"></div>
 
     <!-- Title + subtitle -->
+    <span class="card-id-mp32" id="card-id-mp32"></span>
     <h1 class="card-title" id="card-title"></h1>
     <p class="card-subtitle" id="card-subtitle"></p>
 
@@ -338,6 +343,38 @@ async function init() {
   }
 
   renderCard(card)
+
+  // Carica e mostra id_mp32 in modo asincrono (non blocca il render)
+  loadIdMp32(card.cell_id, card.item_index).then(id => {
+    const el = document.getElementById('card-id-mp32')
+    if (el && id) el.textContent = id
+  })
+}
+
+// ── Fatture DB per id_mp32 ───────────────────────────────────
+const FAT_BASE = 'https://pjyrjcdnmxthpwxpywip.supabase.co/rest/v1'
+const FAT_KEY  = 'sb_publishable_iqrW_m5rY9_NX8C3_NPjNA_gXGBXBLt'
+
+async function loadIdMp32(cell_id, item_index) {
+  try {
+    // Calcola il codice_4dm dalla posizione nella matrice
+    const [sectorId, actIdxStr] = cell_id.split('-')
+    const actIdx    = parseInt(actIdxStr)
+    const rowNum    = ['sec','con','wor','inf','man'].indexOf(sectorId) + 1
+    const colLetter = String.fromCharCode(65 + actIdx)
+    const itemLetter= String.fromCharCode(97 + item_index)
+    const codice    = colLetter + rowNum + itemLetter
+
+    const r = await fetch(
+      `${FAT_BASE}/catalogo_4dm?codice_4dm=eq.${encodeURIComponent(codice)}&select=id_mp32&limit=1`,
+      { headers: { 'apikey': FAT_KEY, 'Authorization': 'Bearer ' + FAT_KEY } }
+    )
+    if (!r.ok) return null
+    const data = await r.json()
+    return data?.[0]?.id_mp32 || null
+  } catch(e) {
+    return null
+  }
 }
 
 function renderCard(card) {
