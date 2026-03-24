@@ -248,7 +248,9 @@ async function syncCatalog() {
     dlog(`  ✓ ${dbCells.length} celle lette`, 'lok')
 
     // 2. Costruisce l'array completo dei record per catalogo_4dm
-    const SECTOR_MAP    = { sec:1, con:2, wor:3, inf:4, man:5 }
+    // Usa la stessa formula di getCodice4dm in matrix.html
+    // colLetter = A-E per attività (indice 0-4), rowNum = 1-5 per settore
+    const SECTOR_ORDER  = ['sec','con','wor','inf','man']
     const SECTOR_LABELS = { sec:'Security', con:'Continuity', wor:'Workplace',
                             inf:'Infrastructure', man:'Management' }
     const ACT_LABELS    = ['Consulenza','Progettazione','Fornitura / Produzione',
@@ -257,11 +259,12 @@ async function syncCatalog() {
     const newCatalog = []
     dbCells.forEach(cell => {
       const [sectorId, actIdxStr] = cell.id.split('-')
-      const actIdx    = parseInt(actIdxStr)
-      const rowNum    = SECTOR_MAP[sectorId]
-      const colLetter = String.fromCharCode(65 + actIdx)
+      const actIdx    = parseInt(actIdxStr)           // 0-4 → A-E (attività = colonna)
+      const rowNum    = SECTOR_ORDER.indexOf(sectorId) + 1  // 1-5 (settore = riga)
+      const colLetter = String.fromCharCode(65 + actIdx)    // A=Consulenza … E=Manutenzione
       ;(cell.items || []).forEach((item, idx) => {
         const itemLetter = String.fromCharCode(97 + idx)
+        // Formato: ColLetter + RowNum + itemLetter  →  es. C1a = Fornitura × Security, voce 0
         newCatalog.push({
           codice_4dm:      colLetter + rowNum + itemLetter,
           settore:         SECTOR_LABELS[sectorId],
@@ -505,7 +508,7 @@ function buildOptions(sel) {
     h += `<optgroup label="${s}">`
     items.forEach(c => {
       h += `<option value="${c.codice_4dm}"${c.codice_4dm === sel ? ' selected' : ''}>`
-        + `${c.codice_4dm} · ${c.descrizione_voce || c.cella_titolo || ''}</option>`
+        + `${c.codice_4dm} · ${c.titolo || c.descrizione_voce || ''}</option>`
     })
     h += '</optgroup>'
   })
