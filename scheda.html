@@ -71,14 +71,21 @@
     .sector-pill {
       display: inline-block; font-size: 8pt; font-weight: 700;
       letter-spacing: .1em; text-transform: uppercase;
-      padding: 3px 10px; border-radius: 20px; margin-bottom: 4mm;
+      padding: 3px 10px; border-radius: 20px;
       font-family: -apple-system, sans-serif;
     }
 
     /* ── Title block ─────────────────────────────────────────── */
+    .pill-row {
+      display: flex; align-items: center; gap: 6px; margin-bottom: 4mm;
+    }
     .card-id-mp32 {
-      font-size: 8pt; font-family: monospace; letter-spacing: .15em;
-      color: #999; margin: 0 0 1mm 0; display: block;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #4CAF50;
+      font-size: 7pt; font-family: monospace; font-weight: 700;
+      letter-spacing: .05em; color: #1A3A6B;
+      flex-shrink: 0;
     }
     .card-title {
       font-size: 26pt; font-weight: 700; color: #1A1A1A;
@@ -208,11 +215,13 @@
 
   <div class="card-body">
 
-    <!-- Sector + activity pill -->
-    <div class="sector-pill" id="card-sector-pill"></div>
+    <!-- Sector + activity pill + id MP32 -->
+    <div class="pill-row">
+      <span class="card-id-mp32" id="card-id-mp32"></span>
+      <div class="sector-pill" id="card-sector-pill"></div>
+    </div>
 
     <!-- Title + subtitle -->
-    <span class="card-id-mp32" id="card-id-mp32"></span>
     <h1 class="card-title" id="card-title"></h1>
     <p class="card-subtitle" id="card-subtitle"></p>
 
