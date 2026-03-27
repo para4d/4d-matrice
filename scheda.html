@@ -358,6 +358,11 @@ async function init() {
     const el = document.getElementById('card-id-mp32')
     if (el && id) el.textContent = id
   })
+
+  // Auto-stampa se chiamato con ?print=1 (dal bottone PDF nel catalogo)
+  if (new URLSearchParams(window.location.search).get('print') === '1') {
+    setTimeout(() => window.print(), 800)
+  }
 }
 
 // ── Fatture DB per id_mp32 ───────────────────────────────────

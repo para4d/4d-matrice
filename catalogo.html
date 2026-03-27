@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Catalogo 4DM — 4D Sistemi</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { background: #EEF5EE; }
+
+    .page-wrap { padding: 1.5rem; }
+
+    /* Toolbar */
+    .cat-toolbar { display: flex; gap: 8px; margin-bottom: 1rem;
+      flex-wrap: wrap; align-items: center; }
+    .cat-toolbar input {
+      padding: 7px 10px; border: 1px solid var(--border);
+      border-radius: var(--radius); font-size: 13px;
+      background: var(--white); width: 240px; }
+    .cat-toolbar select {
+      padding: 7px 10px; border: 1px solid var(--border);
+      border-radius: var(--radius); font-size: 13px;
+      background: var(--white); }
+    .cat-count { font-size: 12px; color: var(--muted); margin-left: auto; }
+
+    /* Table */
+    .cat-table-wrap { overflow-x: auto; }
+    .cat-table { width: 100%; border-collapse: collapse;
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); overflow: hidden; font-size: 13px; }
+    .cat-table thead { background: #f5f5f5; }
+    .cat-table th { padding: 10px 12px; text-align: left; font-size: 11px;
+      font-weight: 600; color: var(--muted); text-transform: uppercase;
+      letter-spacing: .04em; border-bottom: 1px solid var(--border);
+      white-space: nowrap; cursor: pointer; user-select: none; }
+    .cat-table th:hover { color: var(--text); }
+    .cat-table th.sort-asc::after  { content: ' ▲'; font-size: 9px; }
+    .cat-table th.sort-desc::after { content: ' ▼'; font-size: 9px; }
+    .cat-table th:last-child { cursor: default; }
+    .cat-table th:last-child:hover { color: var(--muted); }
+    .cat-table td { padding: 10px 12px; border-bottom: 1px solid #eee;
+      vertical-align: middle; }
+    .cat-table tr:last-child td { border-bottom: none; }
+    .cat-table tr:hover td { background: #fafafa; }
+
+    /* ID badge */
+    .id-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; border-radius: 50%;
+      background: #4CAF50; color: #1A3A6B;
+      font-size: 8pt; font-family: monospace; font-weight: 700;
+      letter-spacing: .05em; flex-shrink: 0;
+    }
+    .id-badge.empty { background: #eee; color: var(--muted); font-size: 7pt; }
+
+    /* Settore pill */
+    .settore-pill { display: inline-block; padding: 2px 8px;
+      border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .sp-sec { background: var(--sec-bg); color: var(--sec-color); }
+    .sp-con { background: var(--con-bg); color: var(--con-color); }
+    .sp-wor { background: var(--wor-bg); color: var(--wor-color); }
+    .sp-inf { background: var(--inf-bg); color: var(--inf-color); }
+    .sp-man { background: var(--man-bg); color: var(--man-color); }
+
+    .titolo-voce { font-weight: 500; color: var(--text); }
+
+    /* Buttons */
+    .btn-preview { padding: 4px 10px; border-radius: var(--radius);
+      font-size: 11px; font-weight: 500; cursor: pointer;
+      background: var(--white); color: var(--blue, #185FA5);
+      border: 1px solid var(--wor-color, #185FA5); }
+    .btn-preview:hover { background: var(--wor-bg, #E6F1FB); }
+    .btn-pdf { padding: 4px 10px; border-radius: var(--radius);
+      font-size: 11px; font-weight: 500; cursor: pointer;
+      background: var(--red); color: #fff; border: none; }
+    .btn-pdf:hover { opacity: .85; }
+    .actions-cell { display: flex; gap: 6px; align-items: center; }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 3rem;
+      color: var(--muted); font-size: 14px; }
+
+    /* Pagination */
+    .cat-pagination { display: flex; gap: 6px; align-items: center;
+      padding: 1rem 0; font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<header class="topbar">
+  <span class="topbar-logo">4D Sistemi — Catalogo 4DM</span>
+  <div class="topbar-right">
+    <span class="topbar-name" id="top-name"></span>
+    <span class="badge" id="top-badge"></span>
+    <a href="matrix.html" class="btn btn-secondary btn-sm">← Matrice</a>
+    <a id="admin-link" href="admin.html" class="btn btn-secondary btn-sm hidden">Admin</a>
+    <button class="btn-link" onclick="logout()">Esci</button>
+  </div>
+</header>
+
+<div class="page-wrap">
+
+  <div class="cat-toolbar">
+    <input type="text" id="search"
+      placeholder="Cerca titolo o settore..." oninput="applyFilters()">
+    <select id="f-settore" onchange="applyFilters()">
+      <option value="">Tutti i settori</option>
+      <option value="sec">Security</option>
+      <option value="con">Continuity</option>
+      <option value="wor">Workplace</option>
+      <option value="inf">Infrastructure</option>
+      <option value="man">Management</option>
+    </select>
+    <select id="f-attivita" onchange="applyFilters()">
+      <option value="">Tutte le attività</option>
+      <option value="0">Consulenza</option>
+      <option value="1">Progettazione</option>
+      <option value="2">Fornitura / Produzione</option>
+      <option value="3">Installazione</option>
+      <option value="4">Manutenzione</option>
+    </select>
+    <span class="cat-count" id="cat-count"></span>
+  </div>
+
+  <div class="cat-table-wrap">
+    <table class="cat-table">
+      <thead>
+        <tr>
+          <th onclick="sortBy('id_mp32')" id="th-id_mp32">ID</th>
+          <th onclick="sortBy('item_name')" id="th-item_name">Titolo voce</th>
+          <th onclick="sortBy('settore')" id="th-settore">Settore × Attività</th>
+          <th>Azioni</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="4" class="empty-state">Caricamento...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cat-pagination" id="cat-pagination"></div>
+
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
+const FAT_BASE = 'https://pjyrjcdnmxthpwxpywip.supabase.co/rest/v1'
+const FAT_KEY  = 'sb_publishable_iqrW_m5rY9_NX8C3_NPjNA_gXGBXBLt'
+
+const SECTORS = {
+  sec: { label:'Security',       act:'sp-sec' },
+  con: { label:'Continuity',     act:'sp-con' },
+  wor: { label:'Workplace',      act:'sp-wor' },
+  inf: { label:'Infrastructure', act:'sp-inf' },
+  man: { label:'Management',     act:'sp-man' },
+}
+const ACTIVITIES = ['Consulenza','Progettazione','Fornitura / Produzione','Installazione','Manutenzione']
+const PAGE_SIZE = 50
+
+let allCards  = []   // { id, item_name, cell_id, item_index, slug, id_mp32 }
+let idMap     = {}   // codice_4dm → id_mp32
+let filtered  = []
+let page      = 0
+let sortCol   = 'id_mp32'
+let sortDir   = 1
+
+function cod(cell_id, item_index) {
+  const [sid, ai] = cell_id.split('-')
+  const row = ['sec','con','wor','inf','man'].indexOf(sid) + 1
+  const col = String.fromCharCode(65 + parseInt(ai))
+  const itl = String.fromCharCode(97 + item_index)
+  return col + row + itl
+}
+
+async function logout() { await sb.auth.signOut(); window.location.href = 'index.html' }
+
+function toast(msg, type='success') {
+  const el = document.getElementById('toast')
+  el.textContent = msg; el.className = 'toast ' + type
+  setTimeout(() => el.className = 'toast hidden', 3000)
+}
+
+// ── Init ──────────────────────────────────────────────────────
+async function init() {
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) { window.location.href = 'index.html'; return }
+
+  const { data: profile } = await sb.from('profiles')
+    .select('full_name,role').eq('id', session.user.id).single()
+
+  document.getElementById('top-name').textContent = profile?.full_name || session.user.email
+  const badge = document.getElementById('top-badge')
+  badge.textContent = profile?.role || ''
+  badge.className = 'badge badge-' + (profile?.role === 'admin' ? 'admin'
+    : profile?.role === 'viewer' ? 'viewer' : 'contrib')
+  if (profile?.role === 'admin')
+    document.getElementById('admin-link').classList.remove('hidden')
+
+  // Carica schede pubblicate
+  const { data: cards, error } = await sb.from('catalog_cards')
+    .select('id, item_name, cell_id, item_index, slug')
+    .eq('published', true)
+    .order('cell_id').order('item_index')
+
+  if (error) { toast('Errore caricamento schede', 'error'); return }
+  if (!cards?.length) {
+    document.getElementById('tbody').innerHTML =
+      '<tr><td colspan="4" class="empty-state">Nessuna scheda pubblicata.</td></tr>'
+    return
+  }
+
+  // Carica id_mp32 dal DB fatture
+  try {
+    const r = await fetch(`${FAT_BASE}/catalogo_4dm?select=codice_4dm,id_mp32`,
+      { headers: { 'apikey': FAT_KEY, 'Authorization': 'Bearer ' + FAT_KEY } })
+    if (r.ok) {
+      const catData = await r.json()
+      catData.forEach(c => { if (c.id_mp32) idMap[c.codice_4dm] = c.id_mp32 })
+    }
+  } catch(e) { /* idMap resta vuoto, mostrerà il cerchio vuoto */ }
+
+  // Arricchisce con id_mp32
+  allCards = cards.map(c => ({
+    ...c,
+    id_mp32: idMap[cod(c.cell_id, c.item_index)] || null,
+    settore: c.cell_id.split('-')[0],
+    act_idx: parseInt(c.cell_id.split('-')[1]),
+  }))
+
+  // Imposta indicatore sort iniziale
+  document.getElementById('th-id_mp32').classList.add('sort-asc')
+
+  applyFilters()
+}
+
+// ── Filters & sort ────────────────────────────────────────────
+function applyFilters() {
+  const s  = document.getElementById('search').value.toLowerCase()
+  const fs = document.getElementById('f-settore').value
+  const fa = document.getElementById('f-attivita').value
+
+  filtered = allCards.filter(c => {
+    if (s && !c.item_name.toLowerCase().includes(s) &&
+        !SECTORS[c.settore]?.label.toLowerCase().includes(s)) return false
+    if (fs && c.settore !== fs) return false
+    if (fa !== '' && c.act_idx !== parseInt(fa)) return false
+    return true
+  })
+
+  // Sort
+  filtered.sort((a, b) => {
+    let va = a[sortCol] ?? '', vb = b[sortCol] ?? ''
+    if (typeof va === 'string') return va.localeCompare(vb) * sortDir
+    return (va - vb) * sortDir
+  })
+
+  document.getElementById('cat-count').textContent = `${filtered.length} schede`
+  page = 0; renderTable(); renderPagination()
+}
+
+function sortBy(col) {
+  if (col === sortCol) sortDir *= -1; else { sortCol = col; sortDir = 1 }
+  document.querySelectorAll('.cat-table th').forEach(th => {
+    th.classList.remove('sort-asc','sort-desc')
+  })
+  const th = document.getElementById('th-' + col)
+  if (th) th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc')
+  page = 0; renderTable(); renderPagination()
+}
+
+// ── Table ─────────────────────────────────────────────────────
+function renderTable() {
+  const slice = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+
+  if (!slice.length) {
+    document.getElementById('tbody').innerHTML =
+      '<tr><td colspan="4" class="empty-state">Nessun risultato.</td></tr>'
+    return
+  }
+
+  document.getElementById('tbody').innerHTML = slice.map(c => {
+    const sec     = SECTORS[c.settore] || { label: c.settore, act: '' }
+    const actLabel = ACTIVITIES[c.act_idx] ?? ''
+    const idBadge = c.id_mp32
+      ? `<span class="id-badge">${c.id_mp32}</span>`
+      : `<span class="id-badge empty">—</span>`
+    const schedaUrl = c.slug
+      ? `scheda.html?slug=${encodeURIComponent(c.slug)}`
+      : `scheda.html?id=${c.id}`
+
+    return `<tr>
+      <td>${idBadge}</td>
+      <td><span class="titolo-voce">${c.item_name}</span></td>
+      <td>
+        <span class="settore-pill ${sec.act}">${sec.label}</span>
+        <span style="color:var(--muted);font-size:11px;margin-left:4px">× ${actLabel}</span>
+      </td>
+      <td>
+        <div class="actions-cell">
+          <button class="btn-preview"
+            onclick="window.open('${schedaUrl}','_blank')">
+            👁 Anteprima
+          </button>
+          <button class="btn-pdf"
+            onclick="openPdf('${schedaUrl}')">
+            ↓ PDF
+          </button>
+        </div>
+      </td>
+    </tr>`
+  }).join('')
+}
+
+// Apre la scheda in una finestra nascosta e stampa in PDF
+function openPdf(url) {
+  const w = window.open(url + (url.includes('?') ? '&' : '?') + 'print=1', '_blank')
+  if (!w) { toast('Abilita i popup per questa pagina.', 'error'); return }
+}
+
+function renderPagination() {
+  const pages = Math.ceil(filtered.length / PAGE_SIZE)
+  if (pages <= 1) { document.getElementById('cat-pagination').innerHTML = ''; return }
+  document.getElementById('cat-pagination').innerHTML =
+    `<button class="btn btn-secondary btn-sm" onclick="goPage(${page-1})"
+      ${page===0?'disabled':''}>← Prec</button>
+     <span>Pagina ${page+1} di ${pages}</span>
+     <button class="btn btn-secondary btn-sm" onclick="goPage(${page+1})"
+      ${page>=pages-1?'disabled':''}>Succ →</button>`
+}
+function goPage(p) { page=p; renderTable(); renderPagination(); window.scrollTo(0,0) }
+
+init()
+</script>
+</body>
+</html>
