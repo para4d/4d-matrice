@@ -390,7 +390,7 @@ function updateCeIdMp32() {
   const badge  = document.getElementById('ce-id-mp32-badge')
   const text   = document.getElementById('ce-id-mp32-text')
   if (!cellId || isNaN(idx) || idx === '') {
-    badge.style.display = 'none'; text.textContent = '— seleziona la voce per vedere l'ID'; return
+    badge.style.display = 'none'; text.textContent = '— seleziona la voce per vedere l\'ID'; return
   }
   const [sid, ai] = cellId.split('-')
   const row = ['sec','con','wor','inf','man'].indexOf(sid) + 1
