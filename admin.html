@@ -124,6 +124,19 @@
         <button class="btn btn-secondary btn-sm" onclick="closeCardEditor()">✕ Chiudi</button>
       </div>
 
+      <div class="form-group" style="margin-bottom:10px">
+        <label style="font-size:11px;color:var(--muted)">ID Scheda (MAP32)</label>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="ce-id-mp32-badge" style="display:none;align-items:center;
+            justify-content:center;width:28px;height:28px;border-radius:50%;
+            background:#4CAF50;color:#1A3A6B;font-size:8pt;font-family:monospace;
+            font-weight:700"></span>
+          <span id="ce-id-mp32-text" style="font-size:12px;color:var(--muted)">
+            — seleziona la voce per vedere l'ID
+          </span>
+        </div>
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="form-group">
           <label>Cella della matrice</label>
@@ -317,7 +330,24 @@ function switchTab(t) {
 let editingCardId = null
 let allCards = []
 
+let idMap4dm = {}  // codice_4dm → id_mp32
+
+async function loadIdMap4dm() {
+  try {
+    const FAT_BASE = 'https://pjyrjcdnmxthpwxpywip.supabase.co/rest/v1'
+    const FAT_KEY  = 'sb_publishable_iqrW_m5rY9_NX8C3_NPjNA_gXGBXBLt'
+    const r = await fetch(`${FAT_BASE}/catalogo_4dm?select=codice_4dm,id_mp32`,
+      { headers: { 'apikey': FAT_KEY, 'Authorization': 'Bearer ' + FAT_KEY } })
+    if (r.ok) {
+      const data = await r.json()
+      idMap4dm = {}
+      data.forEach(d => { if (d.id_mp32) idMap4dm[d.codice_4dm] = d.id_mp32 })
+    }
+  } catch(e) { /* silenzioso */ }
+}
+
 async function loadCatalogo() {
+  await loadIdMap4dm()
   const { data } = await sb.from('catalog_cards').select('*').order('created_at', { ascending: false })
   allCards = data || []
   renderCatalogoList()
@@ -354,6 +384,28 @@ function onCeCellChange() {
     cell.items.map((it, i) => `<option value="${i}">${it.n}</option>`).join('')
 }
 
+function updateCeIdMp32() {
+  const cellId = document.getElementById('ce-cell').value
+  const idx    = parseInt(document.getElementById('ce-item').value)
+  const badge  = document.getElementById('ce-id-mp32-badge')
+  const text   = document.getElementById('ce-id-mp32-text')
+  if (!cellId || isNaN(idx) || idx === '') {
+    badge.style.display = 'none'; text.textContent = '— seleziona la voce per vedere l'ID'; return
+  }
+  const [sid, ai] = cellId.split('-')
+  const row = ['sec','con','wor','inf','man'].indexOf(sid) + 1
+  const col = String.fromCharCode(65 + parseInt(ai))
+  const itl = String.fromCharCode(97 + idx)
+  const cod = col + row + itl
+  const mp32 = idMap4dm[cod]
+  if (mp32) {
+    badge.style.display = 'inline-flex'; badge.textContent = mp32
+    text.textContent = `codice_4dm: ${cod}`
+  } else {
+    badge.style.display = 'none'; text.textContent = `${cod} — ID non ancora assegnato`
+  }
+}
+
 function onCeItemChange() {
   const cellId = document.getElementById('ce-cell').value
   const idx    = document.getElementById('ce-item').value
@@ -369,6 +421,7 @@ function onCeItemChange() {
       .replace(/[ùúûü]/g,'u').replace(/[^a-z0-9]+/g,'-')
       .replace(/^-+|-+$/g,'')
   }
+  updateCeIdMp32()
 }
 
 function renderCatalogoList() {
@@ -395,7 +448,20 @@ function renderCatalogoList() {
     const completeness = Math.round(pct / 10 * 100)
     const covColor = completeness === 100 ? '#3B6D11' : completeness > 50 ? '#854F0B' : '#A32D2D'
 
+    const codice4dm = (() => {
+      const [sid, ai] = (c.cell_id||'').split('-')
+      const row = ['sec','con','wor','inf','man'].indexOf(sid) + 1
+      const col = String.fromCharCode(65 + parseInt(ai))
+      const itl = String.fromCharCode(97 + (c.item_index||0))
+      return col + row + itl
+    })()
+    const idMp32 = idMap4dm[codice4dm] || null
     return `<tr>
+      <td>${idMp32
+        ? `<span style="display:inline-flex;align-items:center;justify-content:center;
+            width:24px;height:24px;border-radius:50%;background:#4CAF50;
+            color:#1A3A6B;font-size:7pt;font-family:monospace;font-weight:700">${idMp32}</span>`
+        : `<span style="color:var(--muted);font-size:11px">—</span>`}</td>
       <td style="font-weight:500">${c.item_name}</td>
       <td style="font-size:12px;color:var(--muted)">${sLabel} × ${aLabel}</td>
       <td>${pubBadge}</td>
@@ -415,7 +481,7 @@ function renderCatalogoList() {
   document.getElementById('catalogo-list').innerHTML = `
     <div class="card" style="padding:0;overflow:hidden">
       <table class="users-table">
-        <thead><tr><th>Voce</th><th>Settore × Attività</th><th>Stato</th><th>Completamento</th><th></th></tr></thead>
+        <thead><tr><th>ID</th><th>Voce</th><th>Settore × Attività</th><th>Stato</th><th>Completamento</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`
@@ -445,6 +511,7 @@ function openCardEditor(cardId) {
     document.getElementById('ce-item').value = card.item_index ?? ''
   }
 
+  updateCeIdMp32()
   document.getElementById('ce-preview-btn').classList.toggle('hidden', !cardId)
   document.getElementById('card-editor').classList.remove('hidden')
   document.getElementById('card-editor').scrollIntoView({ behavior:'smooth', block:'start' })
