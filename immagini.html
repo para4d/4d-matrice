@@ -220,7 +220,12 @@ async function loadImages() {
   const files = (data || []).filter(f => f.name && !f.id?.endsWith('/'))
 
   allFiles = files.map(f => {
-    const { data: { publicUrl } } = sb.storage.from(BUCKET).getPublicUrl(f.name)
+    const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(f.name)
+    // Forza il percorso corretto con /public/ se mancante
+    let publicUrl = urlData.publicUrl
+    if (publicUrl && !publicUrl.includes('/object/public/')) {
+      publicUrl = publicUrl.replace('/object/', '/object/public/')
+    }
     return { name: f.name, url: publicUrl, size: f.metadata?.size || 0,
              created_at: f.created_at }
   })
@@ -312,11 +317,16 @@ async function uploadFiles(files) {
       .replace(/\s+/g, '-')
       .replace(/[^a-z0-9.\-_]/g, '')
 
-    const { error } = await sb.storage.from(BUCKET)
-      .upload(safeName, file, { upsert: true })
+    const { data: upData, error } = await sb.storage.from(BUCKET)
+      .upload(safeName, file, {
+        upsert: true,
+        contentType: file.type || 'image/jpeg',
+      })
 
-    if (error) errors.push(`${file.name}: ${error.message}`)
-    else done++
+    if (error) {
+      console.error('Upload error:', error)
+      errors.push(`${file.name}: ${error.message || JSON.stringify(error)}`)
+    } else done++
   }
 
   pb.style.width = '100%'
