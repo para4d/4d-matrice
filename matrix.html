@@ -379,6 +379,16 @@ async function init() {
   renderMatrix()
   loadMySuggestions()
   loadFatturatoData()  // bordi fatturato (asincrono, non blocca la UI)
+
+  // Se si torna da una scheda con #cell=, riapre la cella esplosa
+  const _hash = window.location.hash
+  if (_hash.startsWith('#cell=')) {
+    const cellId = decodeURIComponent(_hash.replace('#cell=', ''))
+    if (cells[cellId]) {
+      setTimeout(() => showDetail(cellId), 200)
+      history.replaceState(null, '', window.location.pathname)
+    }
+  }
 }
 
 function fmtEur(n) {
@@ -471,7 +481,7 @@ function showDetail(id) {
   document.getElementById('d-items').innerHTML = cell.items.map((it, idx) => {
     const cardKey = `${id}:${idx}`
     const cardLink = cardIndex[cardKey]
-      ? `<a href="scheda.html?id=${cardIndex[cardKey]}" target="_blank"
+      ? `<a href="scheda.html?id=${cardIndex[cardKey]}&from=matrix&cell=${encodeURIComponent(id)}" target="_blank"
            style="font-size:10px;color:#185FA5;text-decoration:none;
                   display:inline-block;margin-top:4px">
            📄 Scheda 4DM

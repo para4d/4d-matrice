@@ -192,7 +192,7 @@
 <!-- ── Screen toolbar (nascosta in stampa) ─────────────────── -->
 <div class="screen-bar">
   <div class="screen-bar-left">
-    <a href="matrix.html">← Matrice</a>
+    <a href="matrix.html" id="back-link">← Matrice</a>
     <span class="screen-bar-title" id="bar-title">Scheda 4DM</span>
     <span class="draft-badge hidden" id="draft-badge">Bozza</span>
   </div>
@@ -358,6 +358,26 @@ async function init() {
     const el = document.getElementById('card-id-mp32')
     if (el && id) el.textContent = id
   })
+
+  // Aggiorna link "indietro" in base al parametro ?from=
+  const _params  = new URLSearchParams(window.location.search)
+  const fromParam = _params.get('from')
+  const bl = document.getElementById('back-link')
+  if (bl) {
+    if (fromParam === 'catalogo') {
+      bl.href = 'catalogo.html'
+      bl.textContent = '← Catalogo'
+    } else if (fromParam === 'analytics') {
+      bl.href = 'analytics.html'
+      bl.textContent = '← Analytics'
+    } else if (fromParam === 'matrix') {
+      // Riapre matrix.html e riespande la cella originale via hash
+      const cell = _params.get('cell') || ''
+      bl.href = cell ? `matrix.html#cell=${encodeURIComponent(cell)}` : 'matrix.html'
+      bl.textContent = '← Matrice'
+    }
+    // se from= non c'è, resta il default "← Matrice"
+  }
 
   // Auto-stampa se chiamato con ?print=1 (dal bottone PDF nel catalogo)
   if (new URLSearchParams(window.location.search).get('print') === '1') {
