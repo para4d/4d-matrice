@@ -220,12 +220,8 @@ async function loadImages() {
   const files = (data || []).filter(f => f.name && !f.id?.endsWith('/'))
 
   allFiles = files.map(f => {
-    const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(f.name)
-    // Forza il percorso corretto con /public/ se mancante
-    let publicUrl = urlData.publicUrl
-    if (publicUrl && !publicUrl.includes('/object/public/')) {
-      publicUrl = publicUrl.replace('/object/', '/object/public/')
-    }
+    // URL pubblico costruito manualmente (formato garantito corretto)
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${encodeURIComponent(f.name)}`
     return { name: f.name, url: publicUrl, size: f.metadata?.size || 0,
              created_at: f.created_at }
   })
@@ -294,7 +290,6 @@ async function uploadFiles(files) {
   const arr = Array.from(files)
   const MAX  = 5 * 1024 * 1024
 
-  // Validazione
   const tooBig = arr.filter(f => f.size > MAX)
   if (tooBig.length) {
     toast(`${tooBig.map(f=>f.name).join(', ')}: superano 5MB`, 'error'); return
@@ -305,33 +300,50 @@ async function uploadFiles(files) {
   const pl = document.getElementById('progress-label')
   pw.style.display = 'block'
 
+  // Recupera il token di sessione per l'autenticazione
+  const { data: { session } } = await sb.auth.getSession()
+  const token = session?.access_token
+  if (!token) { toast('Sessione scaduta — ricarica la pagina.', 'error'); return }
+
   let done = 0, errors = []
 
   for (const file of arr) {
     pl.textContent = `Caricamento ${file.name} (${done + 1}/${arr.length})...`
     pb.style.width = (done / arr.length * 100) + '%'
 
-    // Sanitizza il nome: spazi → trattini, minuscolo
+    // Sanitizza il nome
     const safeName = file.name
       .toLowerCase()
       .replace(/\s+/g, '-')
       .replace(/[^a-z0-9.\-_]/g, '')
 
-    const { data: upData, error } = await sb.storage.from(BUCKET)
-      .upload(safeName, file, {
-        upsert: true,
-        contentType: file.type || 'image/jpeg',
+    // Upload diretto via fetch con token di sessione
+    const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${safeName}`
+    try {
+      const r = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'apikey': SUPABASE_KEY,
+          'Content-Type': file.type || 'application/octet-stream',
+          'x-upsert': 'true',
+        },
+        body: file,
       })
-
-    if (error) {
-      console.error('Upload error:', error)
-      errors.push(`${file.name}: ${error.message || JSON.stringify(error)}`)
-    } else done++
+      if (!r.ok) {
+        const txt = await r.text()
+        console.error('Upload error:', r.status, txt)
+        errors.push(`${file.name}: HTTP ${r.status} — ${txt}`)
+      } else {
+        done++
+      }
+    } catch(e) {
+      errors.push(`${file.name}: ${e.message}`)
+    }
   }
 
   pb.style.width = '100%'
   pl.textContent = `${done} caricati${errors.length ? `, ${errors.length} errori` : ''}`
-
   setTimeout(() => { pw.style.display = 'none'; pb.style.width = '0' }, 2000)
 
   if (errors.length) toast(errors[0], 'error')
